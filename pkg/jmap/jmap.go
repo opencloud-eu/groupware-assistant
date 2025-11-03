@@ -14,6 +14,12 @@ import (
 	"strings"
 )
 
+const (
+	JmapCore     = "urn:ietf:params:jmap:core"
+	JmapMail     = "urn:ietf:params:jmap:mail"
+	JmapContacts = "urn:ietf:params:jmap:contacts"
+)
+
 type Account struct {
 	Name       string `json:"name,omitempty"`
 	IsPersonal bool   `json:"isPersonal"`
@@ -128,7 +134,7 @@ func NewJmapEmailSender(j *Jmap, accountId string, mailboxId string, mailboxRole
 	mailboxesByRole := map[string]string{}
 	{
 		body := map[string]any{
-			"using": []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:contacts"},
+			"using": []string{JmapCore, JmapMail, JmapContacts},
 			"methodCalls": []any{
 				[]any{
 					"Mailbox/get",
@@ -139,48 +145,15 @@ func NewJmapEmailSender(j *Jmap, accountId string, mailboxId string, mailboxRole
 				},
 			},
 		}
-		payload, err := json.Marshal(body)
-		if err != nil {
-			return nil, err
-		}
-		req, err := http.NewRequest(http.MethodPost, j.u.String(), bytes.NewReader(payload))
-		if err != nil {
-			return nil, err
-		}
-		if j.trace {
-			if b, err := httputil.DumpRequestOut(req, true); err == nil {
-				log.Printf("==> %s\n", string(b))
-			}
-		}
-		req.SetBasicAuth(j.username, j.password)
-		resp, err := j.h.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		if j.trace {
-			if b, err := httputil.DumpResponse(resp, true); err == nil {
-				log.Printf("<== %s\n", string(b))
-			}
-		}
-		if resp.StatusCode >= 300 {
-			return nil, fmt.Errorf("status is %s", resp.Status)
-		}
-		defer resp.Body.Close()
-		response, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
 
-		r := map[string]any{}
-		err = json.Unmarshal(response, &r)
+		mailboxes, err := command(j, body, func(methodResponses []any) ([]any, error) {
+			z := methodResponses[0].([]any)
+			f := z[1].(map[string]any)
+			return f["list"].([]any), nil
+		})
 		if err != nil {
 			return nil, err
 		}
-		l := r["methodResponses"].([]any)
-		z := l[0].([]any)
-		f := z[1].(map[string]any)
-		mailboxes := f["list"].([]any)
-
 		for _, a := range mailboxes {
 			mailbox := a.(map[string]any)
 			id := mailbox["id"].(string)
@@ -233,7 +206,7 @@ func (j *JmapEmailSender) EmptyEmails() (int, error) {
 	var ids []string
 	{
 		body := map[string]any{
-			"using": []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"},
+			"using": []string{JmapCore, JmapMail},
 			"methodCalls": []any{
 				[]any{
 					"Email/query",
@@ -246,55 +219,22 @@ func (j *JmapEmailSender) EmptyEmails() (int, error) {
 				},
 			},
 		}
-		payload, err := json.Marshal(body)
+		uncastedIds, err := command(j.j, body, func(methodResponses []any) ([]any, error) {
+			z := methodResponses[0].([]any)
+			f := z[1].(map[string]any)
+			return f["ids"].([]any), nil
+		})
 		if err != nil {
 			return 0, err
 		}
-		req, err := http.NewRequest(http.MethodPost, j.j.u.String(), bytes.NewReader(payload))
-		if err != nil {
-			return 0, err
-		}
-		if j.j.trace {
-			if b, err := httputil.DumpRequestOut(req, true); err == nil {
-				log.Printf("==> %s\n", string(b))
-			}
-		}
-		req.SetBasicAuth(j.j.username, j.j.password)
-		resp, err := j.j.h.Do(req)
-		if err != nil {
-			return 0, err
-		}
-		if j.j.trace {
-			if b, err := httputil.DumpResponse(resp, true); err == nil {
-				log.Printf("<== %s\n", string(b))
-			}
-		}
-		if resp.StatusCode >= 300 {
-			return 0, fmt.Errorf("status is %s", resp.Status)
-		}
-		defer resp.Body.Close()
-		response, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return 0, err
-		}
-
-		r := map[string]any{}
-		err = json.Unmarshal(response, &r)
-		if err != nil {
-			return 0, err
-		}
-		l := r["methodResponses"].([]any)
-		z := l[0].([]any)
-		f := z[1].(map[string]any)
-		v := f["ids"].([]any)
-		ids = make([]string, len(v))
-		for i, a := range v {
+		ids = make([]string, len(uncastedIds))
+		for i, a := range uncastedIds {
 			ids[i] = a.(string)
 		}
 	}
 	for chunk := range slices.Chunk(ids, 20) {
 		body := map[string]any{
-			"using": []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"},
+			"using": []string{JmapCore, JmapMail},
 			"methodCalls": []any{
 				[]any{
 					"Email/set",
@@ -306,40 +246,9 @@ func (j *JmapEmailSender) EmptyEmails() (int, error) {
 				},
 			},
 		}
-		payload, err := json.Marshal(body)
-		if err != nil {
-			return 0, err
-		}
-		req, err := http.NewRequest(http.MethodPost, j.j.u.String(), bytes.NewReader(payload))
-		if err != nil {
-			return 0, err
-		}
-		if j.j.trace {
-			if b, err := httputil.DumpRequestOut(req, true); err == nil {
-				log.Printf("==> %s\n", string(b))
-			}
-		}
-		req.SetBasicAuth(j.j.username, j.j.password)
-		resp, err := j.j.h.Do(req)
-		if err != nil {
-			return 0, err
-		}
-		if j.j.trace {
-			if b, err := httputil.DumpResponse(resp, true); err == nil {
-				log.Printf("<== %s\n", string(b))
-			}
-		}
-		if resp.StatusCode >= 300 {
-			return 0, fmt.Errorf("status is %s", resp.Status)
-		}
-		defer resp.Body.Close()
-		response, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return 0, err
-		}
-
-		r := map[string]any{}
-		err = json.Unmarshal(response, &r)
+		_, err := command(j.j, body, func(methodResponses []any) (string, error) {
+			return "", nil
+		})
 		if err != nil {
 			return 0, err
 		}
@@ -429,7 +338,7 @@ func (j *JmapEmailSender) SendEmail(e *JmapEmailBuilder) (string, error) {
 	}
 
 	body := map[string]any{
-		"using": []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"},
+		"using": []string{JmapCore, JmapMail},
 		"methodCalls": []any{
 			[]any{
 				"Email/set",
@@ -443,73 +352,28 @@ func (j *JmapEmailSender) SendEmail(e *JmapEmailBuilder) (string, error) {
 			},
 		},
 	}
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return "", err
-	}
-	req, err := http.NewRequest(http.MethodPost, j.j.u.String(), bytes.NewReader(payload))
-	if err != nil {
-		return "", err
-	}
-
-	if j.j.trace {
-		if b, err := httputil.DumpRequestOut(req, true); err == nil {
-			log.Printf("==> %s\n", string(b))
-		}
-	}
-
-	req.SetBasicAuth(j.j.username, j.j.password)
-	resp, err := j.j.h.Do(req)
-	if err != nil {
-		return "", err
-	}
-	if j.j.trace {
-		if b, err := httputil.DumpResponse(resp, true); err == nil {
-			log.Printf("<== %s\n", string(b))
-		}
-	}
-	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("status is %s", resp.Status)
-	}
-	defer resp.Body.Close()
-	response, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	r := map[string]any{}
-	err = json.Unmarshal(response, &r)
-	if err != nil {
-		return "", err
-	}
-
-	if j.j.trace {
-		if b, err := httputil.DumpResponse(resp, true); err == nil {
-			log.Printf("<== %s\n", string(b))
-		}
-	}
-
-	l := r["methodResponses"].([]any)
-	z := l[0].([]any)
-	f := z[1].(map[string]any)
-	if x, ok := f["created"]; ok {
-		created := x.(map[string]any)
-		if c, ok := created["c"].(map[string]any); ok {
-			return c["id"].(string), nil
+	return command(j.j, body, func(methodResponses []any) (string, error) {
+		z := methodResponses[0].([]any)
+		f := z[1].(map[string]any)
+		if x, ok := f["created"]; ok {
+			created := x.(map[string]any)
+			if c, ok := created["c"].(map[string]any); ok {
+				return c["id"].(string), nil
+			} else {
+				fmt.Println(f)
+				return "", fmt.Errorf("failed to create email")
+			}
 		} else {
-			fmt.Println(f)
-			return "", fmt.Errorf("failed to create email")
+			if ncx, ok := f["notCreated"]; ok {
+				nc := ncx.(map[string]any)
+				c := nc["c"].(map[string]any)
+				return "", fmt.Errorf("failed to create email: %v", c["description"])
+			} else {
+				fmt.Println(f)
+				return "", fmt.Errorf("failed to create email")
+			}
 		}
-	} else {
-		if ncx, ok := f["notCreated"]; ok {
-			nc := ncx.(map[string]any)
-			c := nc["c"].(map[string]any)
-			return "", fmt.Errorf("failed to create email: %v", c["description"])
-		} else {
-			fmt.Println(f)
-			return "", fmt.Errorf("failed to create email")
-		}
-	}
+	})
 }
 
 type JmapContactSender struct {
@@ -538,7 +402,7 @@ func NewJmapContactSender(j *Jmap, accountId string, addressbookId string) (*Jma
 	addressbooksById := map[string]map[string]any{}
 	{
 		body := map[string]any{
-			"using": []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:contacts"},
+			"using": []string{JmapCore, JmapContacts},
 			"methodCalls": []any{
 				[]any{
 					"AddressBook/get",
@@ -549,48 +413,14 @@ func NewJmapContactSender(j *Jmap, accountId string, addressbookId string) (*Jma
 				},
 			},
 		}
-		payload, err := json.Marshal(body)
+		addressbooks, err := command(j, body, func(methodResponses []any) ([]any, error) {
+			z := methodResponses[0].([]any)
+			f := z[1].(map[string]any)
+			return f["list"].([]any), nil
+		})
 		if err != nil {
 			return nil, err
 		}
-		req, err := http.NewRequest(http.MethodPost, j.u.String(), bytes.NewReader(payload))
-		if err != nil {
-			return nil, err
-		}
-		if j.trace {
-			if b, err := httputil.DumpRequestOut(req, true); err == nil {
-				log.Printf("==> %s\n", string(b))
-			}
-		}
-		req.SetBasicAuth(j.username, j.password)
-		resp, err := j.h.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		if j.trace {
-			if b, err := httputil.DumpResponse(resp, true); err == nil {
-				log.Printf("<== %s\n", string(b))
-			}
-		}
-		if resp.StatusCode >= 300 {
-			return nil, fmt.Errorf("status is %s", resp.Status)
-		}
-		defer resp.Body.Close()
-		response, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-
-		r := map[string]any{}
-		err = json.Unmarshal(response, &r)
-		if err != nil {
-			return nil, err
-		}
-		l := r["methodResponses"].([]any)
-		z := l[0].([]any)
-		f := z[1].(map[string]any)
-		addressbooks := f["list"].([]any)
-
 		for _, a := range addressbooks {
 			addressbook := a.(map[string]any)
 			id := addressbook["id"].(string)
@@ -628,7 +458,7 @@ func (j *JmapContactSender) Close() error {
 
 func (j *JmapContactSender) EmptyContacts() (uint, error) {
 	body := map[string]any{
-		"using": []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:contacts"},
+		"using": []string{JmapCore, JmapContacts},
 		"methodCalls": []any{
 			[]any{
 				"ContactCard/query",
@@ -642,55 +472,11 @@ func (j *JmapContactSender) EmptyContacts() (uint, error) {
 			},
 		},
 	}
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return uint(0), err
-	}
-	req, err := http.NewRequest(http.MethodPost, j.j.u.String(), bytes.NewReader(payload))
-	if err != nil {
-		return uint(0), err
-	}
 
-	if j.j.trace {
-		if b, err := httputil.DumpRequestOut(req, true); err == nil {
-			log.Printf("==> %s\n", string(b))
-		}
-	}
-
-	req.SetBasicAuth(j.j.username, j.j.password)
-	resp, err := j.j.h.Do(req)
-	if err != nil {
-		return uint(0), err
-	}
-	if j.j.trace {
-		if b, err := httputil.DumpResponse(resp, true); err == nil {
-			log.Printf("<== %s\n", string(b))
-		}
-	}
-	if resp.StatusCode >= 300 {
-		return uint(0), fmt.Errorf("status is %s", resp.Status)
-	}
-	defer resp.Body.Close()
-	response, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return uint(0), err
-	}
-
-	r := map[string]any{}
-	err = json.Unmarshal(response, &r)
-	if err != nil {
-		return uint(0), err
-	}
-
-	if j.j.trace {
-		if b, err := httputil.DumpResponse(resp, true); err == nil {
-			log.Printf("<== %s\n", string(b))
-		}
-	}
-
-	l := r["methodResponses"].([]any)
-	z := l[0].([]any)
-	f := z[1].(map[string]any)
+	f, err := command(j.j, body, func(methodResponses []any) (map[string]any, error) {
+		z := methodResponses[0].([]any)
+		return z[1].(map[string]any), nil
+	})
 	if idsObj, ok := f["ids"]; ok {
 		anies := idsObj.([]any)
 		ids := make([]string, len(anies))
@@ -707,14 +493,13 @@ func (j *JmapContactSender) EmptyContacts() (uint, error) {
 		}
 		return destroyed, nil
 	} else {
-		fmt.Println(f)
-		return uint(0), fmt.Errorf("failed to destroy ContactCards")
+		return uint(0), fmt.Errorf("failed to destroy ContactCards: %v", f)
 	}
 }
 
 func (j *JmapContactSender) destroy(ids []string) error {
 	body := map[string]any{
-		"using": []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:contacts"},
+		"using": []string{JmapCore, JmapContacts},
 		"methodCalls": []any{
 			[]any{
 				"ContactCard/set",
@@ -726,55 +511,15 @@ func (j *JmapContactSender) destroy(ids []string) error {
 			},
 		},
 	}
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequest(http.MethodPost, j.j.u.String(), bytes.NewReader(payload))
-	if err != nil {
-		return err
-	}
 
-	if j.j.trace {
-		if b, err := httputil.DumpRequestOut(req, true); err == nil {
-			log.Printf("==> %s\n", string(b))
-		}
-	}
-
-	req.SetBasicAuth(j.j.username, j.j.password)
-	resp, err := j.j.h.Do(req)
-	if err != nil {
-		return err
-	}
-	if j.j.trace {
-		if b, err := httputil.DumpResponse(resp, true); err == nil {
-			log.Printf("<== %s\n", string(b))
-		}
-	}
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("status is %s", resp.Status)
-	}
-	defer resp.Body.Close()
-	response, err := io.ReadAll(resp.Body)
+	f, err := command(j.j, body, func(methodResponses []any) (map[string]any, error) {
+		z := methodResponses[0].([]any)
+		return z[1].(map[string]any), nil
+	})
 	if err != nil {
 		return err
 	}
 
-	r := map[string]any{}
-	err = json.Unmarshal(response, &r)
-	if err != nil {
-		return err
-	}
-
-	if j.j.trace {
-		if b, err := httputil.DumpResponse(resp, true); err == nil {
-			log.Printf("<== %s\n", string(b))
-		}
-	}
-
-	l := r["methodResponses"].([]any)
-	z := l[0].([]any)
-	f := z[1].(map[string]any)
 	if x, ok := f["destroyed"]; ok {
 		destroyed := x.([]any)
 		if len(destroyed) == len(ids) {
@@ -797,7 +542,7 @@ func (j *JmapContactSender) destroy(ids []string) error {
 
 func (j *JmapContactSender) CreateContact(c map[string]any) (string, error) {
 	body := map[string]any{
-		"using": []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:contacts"},
+		"using": []string{JmapCore, JmapContacts},
 		"methodCalls": []any{
 			[]any{
 				"ContactCard/set",
@@ -811,71 +556,79 @@ func (j *JmapContactSender) CreateContact(c map[string]any) (string, error) {
 			},
 		},
 	}
+	return command(j.j, body, func(methodResponses []any) (string, error) {
+		z := methodResponses[0].([]any)
+		f := z[1].(map[string]any)
+		if x, ok := f["created"]; ok {
+			created := x.(map[string]any)
+			if c, ok := created["c"].(map[string]any); ok {
+				return c["id"].(string), nil
+			} else {
+				fmt.Println(f)
+				return "", fmt.Errorf("failed to create ContactCard")
+			}
+		} else {
+			if ncx, ok := f["notCreated"]; ok {
+				nc := ncx.(map[string]any)
+				c := nc["c"].(map[string]any)
+				return "", fmt.Errorf("failed to create ContactCard: %v", c["description"])
+			} else {
+				fmt.Println(f)
+				return "", fmt.Errorf("failed to create ContactCard")
+			}
+		}
+	})
+}
+
+func command[T any](j *Jmap, body map[string]any, closure func([]any) (T, error)) (T, error) {
+	var zero T
+
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return "", err
+		return zero, err
 	}
-	req, err := http.NewRequest(http.MethodPost, j.j.u.String(), bytes.NewReader(payload))
+	req, err := http.NewRequest(http.MethodPost, j.u.String(), bytes.NewReader(payload))
 	if err != nil {
-		return "", err
+		return zero, err
 	}
 
-	if j.j.trace {
+	if j.trace {
 		if b, err := httputil.DumpRequestOut(req, true); err == nil {
 			log.Printf("==> %s\n", string(b))
 		}
 	}
 
-	req.SetBasicAuth(j.j.username, j.j.password)
-	resp, err := j.j.h.Do(req)
+	req.SetBasicAuth(j.username, j.password)
+	resp, err := j.h.Do(req)
 	if err != nil {
-		return "", err
+		return zero, err
 	}
-	if j.j.trace {
+	if j.trace {
 		if b, err := httputil.DumpResponse(resp, true); err == nil {
 			log.Printf("<== %s\n", string(b))
 		}
 	}
 	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("status is %s", resp.Status)
+		return zero, fmt.Errorf("JMAP command HTTP response status is %s", resp.Status)
 	}
 	defer resp.Body.Close()
 	response, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return zero, err
 	}
 
 	r := map[string]any{}
 	err = json.Unmarshal(response, &r)
 	if err != nil {
-		return "", err
+		return zero, err
 	}
 
-	if j.j.trace {
+	if j.trace {
 		if b, err := httputil.DumpResponse(resp, true); err == nil {
 			log.Printf("<== %s\n", string(b))
 		}
 	}
 
-	l := r["methodResponses"].([]any)
-	z := l[0].([]any)
-	f := z[1].(map[string]any)
-	if x, ok := f["created"]; ok {
-		created := x.(map[string]any)
-		if c, ok := created["c"].(map[string]any); ok {
-			return c["id"].(string), nil
-		} else {
-			fmt.Println(f)
-			return "", fmt.Errorf("failed to create ContactCard")
-		}
-	} else {
-		if ncx, ok := f["notCreated"]; ok {
-			nc := ncx.(map[string]any)
-			c := nc["c"].(map[string]any)
-			return "", fmt.Errorf("failed to create ContactCard: %v", c["description"])
-		} else {
-			fmt.Println(f)
-			return "", fmt.Errorf("failed to create ContactCard")
-		}
-	}
+	methodResponses := r["methodResponses"].([]any)
+	return closure(methodResponses)
 }
