@@ -61,7 +61,7 @@ func GenerateEmails(
 		}
 	}
 
-	var s *jmap.JmapEmailSender = nil
+	var s *jmap.EmailSender = nil
 	{
 		u, err := url.Parse(jmapUrl)
 		if err != nil {
@@ -74,7 +74,7 @@ func GenerateEmails(
 		}
 		defer j.Close()
 
-		s, err = jmap.NewJmapEmailSender(j, accountId, mailboxId, mailboxRole)
+		s, err = jmap.NewEmailSender(j, accountId, mailboxId, mailboxRole)
 		if err != nil {
 			return err
 		}

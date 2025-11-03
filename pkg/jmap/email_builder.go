@@ -38,86 +38,86 @@ func newEmailBuilder(accountId string, mailboxId string) (*EmailBuilder, error) 
 	}, nil
 }
 
-func (j *EmailBuilder) To(to mail.Address) {
-	j.email["to"] = []map[string]any{
+func (b *EmailBuilder) To(to mail.Address) {
+	b.email["to"] = []map[string]any{
 		{"name": to.Name, "email": to.Address},
 	}
 }
 
-func (j *EmailBuilder) CC(cc []mail.Address) {
+func (b *EmailBuilder) CC(cc []mail.Address) {
 	list := make([]map[string]any, len(cc))
 	for i, a := range cc {
 		list[i] = map[string]any{"name": a.Name, "email": a.Address}
 	}
-	j.email["cc"] = list
+	b.email["cc"] = list
 }
 
-func (j *EmailBuilder) BCC(bcc []mail.Address) {
+func (b *EmailBuilder) BCC(bcc []mail.Address) {
 	list := make([]map[string]any, len(bcc))
 	for i, a := range bcc {
 		list[i] = map[string]any{"name": a.Name, "email": a.Address}
 	}
-	j.email["bcc"] = list
+	b.email["bcc"] = list
 }
 
-func (j *EmailBuilder) From(from mail.Address) {
-	j.email["from"] = []map[string]any{
+func (b *EmailBuilder) From(from mail.Address) {
+	b.email["from"] = []map[string]any{
 		{"name": from.Name, "email": from.Address},
 	}
 }
 
-func (j *EmailBuilder) Sender(sender mail.Address) {
-	j.email["sender"] = []map[string]any{
+func (b *EmailBuilder) Sender(sender mail.Address) {
+	b.email["sender"] = []map[string]any{
 		{"name": sender.Name, "email": sender.Address},
 	}
 }
 
-func (j *EmailBuilder) MessageId(id string) {
-	j.header("Message-ID", id)
+func (b *EmailBuilder) MessageId(id string) {
+	b.header("Message-ID", id)
 }
 
-func (j *EmailBuilder) InReplyTo(address string) {
-	j.email["inReplyTo"] = []string{address}
+func (b *EmailBuilder) InReplyTo(address string) {
+	b.email["inReplyTo"] = []string{address}
 }
 
-func (j *EmailBuilder) Subject(value string) {
-	j.email["subject"] = value
+func (b *EmailBuilder) Subject(value string) {
+	b.email["subject"] = value
 }
 
-func (j *EmailBuilder) header(name string, value string) {
-	j.email["header:"+name] = value
+func (b *EmailBuilder) header(name string, value string) {
+	b.email["header:"+name] = value
 }
 
-func (j *EmailBuilder) ReturnPath(returnPath string) {
-	j.header("Return-Path", returnPath)
+func (b *EmailBuilder) ReturnPath(returnPath string) {
+	b.header("Return-Path", returnPath)
 }
 
-func (j *EmailBuilder) Received(t time.Time) {
-	j.email["receivedAt"] = t.Format(time.RFC3339)
+func (b *EmailBuilder) Received(t time.Time) {
+	b.email["receivedAt"] = t.Format(time.RFC3339)
 }
 
-func (j *EmailBuilder) Sent(t time.Time) {
-	j.email["sentAt"] = t.Format(time.RFC3339)
+func (b *EmailBuilder) Sent(t time.Time) {
+	b.email["sentAt"] = t.Format(time.RFC3339)
 }
 
-func (j *EmailBuilder) HTML(text string) {
-	j.html = tools.ToHtml(text)
+func (b *EmailBuilder) HTML(text string) {
+	b.html = tools.ToHtml(text)
 }
 
-func (j *EmailBuilder) Text(text string) {
-	j.text = text
+func (b *EmailBuilder) Text(text string) {
+	b.text = text
 }
 
-func (j *EmailBuilder) Attach(content []byte, contentType string, filename string) {
-	j.attachments = append(j.attachments, attachment{
+func (b *EmailBuilder) Attach(content []byte, contentType string, filename string) {
+	b.attachments = append(b.attachments, attachment{
 		data:     content,
 		mime:     contentType,
 		filename: filename,
 	})
 }
 
-func (j *EmailBuilder) AttachInline(content []byte, contentType string, filename string, contentId string) {
-	j.attachments = append(j.attachments, attachment{
+func (b *EmailBuilder) AttachInline(content []byte, contentType string, filename string, contentId string) {
+	b.attachments = append(b.attachments, attachment{
 		name:     contentId,
 		data:     content,
 		mime:     contentType,
@@ -125,43 +125,43 @@ func (j *EmailBuilder) AttachInline(content []byte, contentType string, filename
 	})
 }
 
-func (j *EmailBuilder) keyword(k string) {
-	keywords, ok := j.email["keywords"].(map[string]bool)
+func (b *EmailBuilder) keyword(k string) {
+	keywords, ok := b.email["keywords"].(map[string]bool)
 	if !ok {
 		keywords = map[string]bool{}
 	}
 	keywords[k] = true
-	j.email["keywords"] = keywords
+	b.email["keywords"] = keywords
 }
 
-func (j *EmailBuilder) Answered() {
-	j.keyword("$answered")
+func (b *EmailBuilder) Answered() {
+	b.keyword("$answered")
 }
 
-func (j *EmailBuilder) Draft() {
-	j.keyword("$draft")
+func (b *EmailBuilder) Draft() {
+	b.keyword("$draft")
 }
 
-func (j *EmailBuilder) Important() {
-	j.keyword("$flagged")
+func (b *EmailBuilder) Important() {
+	b.keyword("$flagged")
 }
 
-func (j *EmailBuilder) Forwarded() {
-	j.keyword("$forwarded")
+func (b *EmailBuilder) Forwarded() {
+	b.keyword("$forwarded")
 }
 
-func (j *EmailBuilder) Junk() {
-	j.keyword("$junk")
+func (b *EmailBuilder) Junk() {
+	b.keyword("$junk")
 }
 
-func (j *EmailBuilder) NotJunk() {
-	j.keyword("$notjunk")
+func (b *EmailBuilder) NotJunk() {
+	b.keyword("$notjunk")
 }
 
-func (j *EmailBuilder) Phishing() {
-	j.keyword("$phishing")
+func (b *EmailBuilder) Phishing() {
+	b.keyword("$phishing")
 }
 
-func (j *EmailBuilder) Seen() {
-	j.keyword("$seen")
+func (b *EmailBuilder) Seen() {
+	b.keyword("$seen")
 }

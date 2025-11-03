@@ -37,6 +37,14 @@ func ToBoolMap(s []string) map[string]bool {
 	return m
 }
 
+func ToBoolMapS(s ...string) map[string]bool {
+	m := make(map[string]bool, len(s))
+	for _, e := range s {
+		m[e] = true
+	}
+	return m
+}
+
 func PickRandom[T any](s ...T) T {
 	return s[rand.IntN(len(s))]
 }

@@ -15,9 +15,12 @@ import (
 )
 
 const (
-	JmapCore     = "urn:ietf:params:jmap:core"
-	JmapMail     = "urn:ietf:params:jmap:mail"
-	JmapContacts = "urn:ietf:params:jmap:contacts"
+	JmapCore      = "urn:ietf:params:jmap:core"
+	JmapMail      = "urn:ietf:params:jmap:mail"
+	JmapContacts  = "urn:ietf:params:jmap:contacts"
+	JmapCalendars = "urn:ietf:params:jmap:calendars"
+
+	EmailDeletionChunkSize = 20
 )
 
 type Account struct {
@@ -27,8 +30,9 @@ type Account struct {
 }
 
 type SessionPrimaryAccounts struct {
-	Mail    string `json:"urn:ietf:params:jmap:mail,omitempty"`
-	Contact string `json:"urn:ietf:params:jmap:contacts,omitempty"`
+	Mail      string `json:"urn:ietf:params:jmap:mail,omitempty"`
+	Contact   string `json:"urn:ietf:params:jmap:contacts,omitempty"`
+	Calendars string `json:"urn:ietf:params:jmap:calendars,omitempty"`
 }
 
 type Session struct {
@@ -111,151 +115,6 @@ func (j *Jmap) Close() error {
 	return nil
 }
 
-type JmapEmailSender struct {
-	j         *Jmap
-	accountId string
-	mailboxId string
-}
-
-func NewJmapEmailSender(j *Jmap, accountId string, mailboxId string, mailboxRole string) (*JmapEmailSender, error) {
-	if accountId == "" {
-		// use default mail account
-		accountId = j.session.PrimaryAccounts.Mail
-		if accountId == "" {
-			return nil, fmt.Errorf("session has no matching primary account")
-		}
-	} else {
-		if _, ok := j.session.Accounts[accountId]; !ok {
-			return nil, fmt.Errorf("account ID '%s' does not exist in session", accountId)
-		}
-	}
-
-	mailboxesById := map[string]map[string]any{}
-	mailboxesByRole := map[string]string{}
-	{
-		body := map[string]any{
-			"using": []string{JmapCore, JmapMail, JmapContacts},
-			"methodCalls": []any{
-				[]any{
-					"Mailbox/get",
-					map[string]any{
-						"accountId": accountId,
-					},
-					"0",
-				},
-			},
-		}
-
-		mailboxes, err := command(j, body, func(methodResponses []any) ([]any, error) {
-			z := methodResponses[0].([]any)
-			f := z[1].(map[string]any)
-			return f["list"].([]any), nil
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, a := range mailboxes {
-			mailbox := a.(map[string]any)
-			id := mailbox["id"].(string)
-			role := ""
-			if r := mailbox["role"]; r != nil {
-				role = r.(string)
-			}
-			mailboxesById[id] = mailbox
-			if role != "" {
-				mailboxesByRole[role] = id
-			}
-		}
-	}
-	if mailboxId != "" {
-		if _, ok := mailboxesById[mailboxId]; !ok {
-			return nil, fmt.Errorf("mailbox with id '%s' does not exist", mailboxId)
-		}
-	}
-	if mailboxRole != "" {
-		if mailboxId == "" {
-			id, ok := mailboxesByRole[mailboxRole]
-			if !ok {
-				return nil, fmt.Errorf("there is no mailbox with role '%s'", mailboxRole)
-			}
-			mailboxId = id
-		} else {
-			mailbox := mailboxesById[mailboxId]
-			if mailboxRole != mailbox["role"].(string) {
-				return nil, fmt.Errorf("mailbox with id '%s' does not have role '%s' but '%v'", mailboxId, mailboxRole, mailbox["role"])
-			}
-		}
-	}
-
-	return &JmapEmailSender{
-		j:         j,
-		accountId: accountId,
-		mailboxId: mailboxId,
-	}, nil
-}
-
-func (j *JmapEmailSender) Close() error {
-	return nil
-}
-
-func (j *JmapEmailSender) NewEmail() (*EmailBuilder, error) {
-	return newEmailBuilder(j.accountId, j.mailboxId)
-}
-
-func (j *JmapEmailSender) EmptyEmails() (int, error) {
-	var ids []string
-	{
-		body := map[string]any{
-			"using": []string{JmapCore, JmapMail},
-			"methodCalls": []any{
-				[]any{
-					"Email/query",
-					map[string]any{
-						"accountId":  j.accountId,
-						"inMailbox":  map[string]bool{j.mailboxId: true},
-						"properties": "id",
-					},
-					"0",
-				},
-			},
-		}
-		uncastedIds, err := command(j.j, body, func(methodResponses []any) ([]any, error) {
-			z := methodResponses[0].([]any)
-			f := z[1].(map[string]any)
-			return f["ids"].([]any), nil
-		})
-		if err != nil {
-			return 0, err
-		}
-		ids = make([]string, len(uncastedIds))
-		for i, a := range uncastedIds {
-			ids[i] = a.(string)
-		}
-	}
-	for chunk := range slices.Chunk(ids, 20) {
-		body := map[string]any{
-			"using": []string{JmapCore, JmapMail},
-			"methodCalls": []any{
-				[]any{
-					"Email/set",
-					map[string]any{
-						"accountId": j.accountId,
-						"destroy":   chunk,
-					},
-					"0",
-				},
-			},
-		}
-		_, err := command(j.j, body, func(methodResponses []any) (string, error) {
-			return "", nil
-		})
-		if err != nil {
-			return 0, err
-		}
-	}
-	return len(ids), nil
-}
-
 type uploadedBlob struct {
 	BlobId string `json:"blobId"`
 	Size   int    `json:"size"`
@@ -296,288 +155,6 @@ func (j *Jmap) uploadBlob(accountId string, data []byte, mimetype string) (uploa
 	}
 
 	return result, nil
-}
-
-func (j *JmapEmailSender) SendEmail(e *EmailBuilder) (string, error) {
-	bodyValues := map[string]map[string]any{}
-	if e.text != "" {
-		bodyValues["t"] = map[string]any{"value": e.text}
-		e.email["textBody"] = []map[string]any{{
-			"partId": "t",
-			"type":   "text/plain",
-		}}
-	}
-	if e.html != "" {
-		bodyValues["h"] = map[string]any{"value": e.html}
-		e.email["htmlBody"] = []map[string]any{{
-			"partId": "h",
-			"type":   "text/html",
-		}}
-	}
-
-	attachments := []map[string]any{}
-	for _, a := range e.attachments {
-		upload, err := j.j.uploadBlob(j.accountId, a.data, a.mime)
-		if err != nil {
-			return "", err
-		}
-		ao := map[string]any{
-			"blobId":      upload.BlobId,
-			"name":        a.filename,
-			"type":        a.mime,
-			"disposition": "attachment",
-		}
-		attachments = append(attachments, ao)
-	}
-	if len(attachments) > 0 {
-		e.email["attachments"] = attachments
-	}
-
-	if len(bodyValues) > 0 {
-		e.email["bodyValues"] = bodyValues
-	}
-
-	body := map[string]any{
-		"using": []string{JmapCore, JmapMail},
-		"methodCalls": []any{
-			[]any{
-				"Email/set",
-				map[string]any{
-					"accountId": j.accountId,
-					"create": map[string]any{
-						"c": e.email,
-					},
-				},
-				"0",
-			},
-		},
-	}
-	return command(j.j, body, func(methodResponses []any) (string, error) {
-		z := methodResponses[0].([]any)
-		f := z[1].(map[string]any)
-		if x, ok := f["created"]; ok {
-			created := x.(map[string]any)
-			if c, ok := created["c"].(map[string]any); ok {
-				return c["id"].(string), nil
-			} else {
-				fmt.Println(f)
-				return "", fmt.Errorf("failed to create email")
-			}
-		} else {
-			if ncx, ok := f["notCreated"]; ok {
-				nc := ncx.(map[string]any)
-				c := nc["c"].(map[string]any)
-				return "", fmt.Errorf("failed to create email: %v", c["description"])
-			} else {
-				fmt.Println(f)
-				return "", fmt.Errorf("failed to create email")
-			}
-		}
-	})
-}
-
-type JmapContactSender struct {
-	j             *Jmap
-	accountId     string
-	addressbookId string
-}
-
-func (s *JmapContactSender) AddressBook() string {
-	return s.addressbookId
-}
-
-func NewJmapContactSender(j *Jmap, accountId string, addressbookId string) (*JmapContactSender, error) {
-	if accountId == "" {
-		// use default mail account
-		accountId = j.session.PrimaryAccounts.Contact
-		if accountId == "" {
-			return nil, fmt.Errorf("session has no matching primary account")
-		}
-	} else {
-		if _, ok := j.session.Accounts[accountId]; !ok {
-			return nil, fmt.Errorf("account ID '%s' does not exist in session", accountId)
-		}
-	}
-
-	addressbooksById := map[string]map[string]any{}
-	{
-		body := map[string]any{
-			"using": []string{JmapCore, JmapContacts},
-			"methodCalls": []any{
-				[]any{
-					"AddressBook/get",
-					map[string]any{
-						"accountId": accountId,
-					},
-					"0",
-				},
-			},
-		}
-		addressbooks, err := command(j, body, func(methodResponses []any) ([]any, error) {
-			z := methodResponses[0].([]any)
-			f := z[1].(map[string]any)
-			return f["list"].([]any), nil
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, a := range addressbooks {
-			addressbook := a.(map[string]any)
-			id := addressbook["id"].(string)
-			addressbooksById[id] = addressbook
-		}
-	}
-	if addressbookId != "" {
-		if _, ok := addressbooksById[addressbookId]; !ok {
-			return nil, fmt.Errorf("addressbook with id '%s' does not exist", addressbookId)
-		}
-	} else {
-		for id, addressbook := range addressbooksById {
-			if isDefault, ok := addressbook["isDefault"]; ok {
-				if isDefault.(bool) {
-					addressbookId = id
-					break
-				}
-			}
-		}
-	}
-	if addressbookId == "" {
-		return nil, fmt.Errorf("failed to find a default AddressBook")
-	}
-
-	return &JmapContactSender{
-		j:             j,
-		accountId:     accountId,
-		addressbookId: addressbookId,
-	}, nil
-}
-
-func (j *JmapContactSender) Close() error {
-	return nil
-}
-
-func (j *JmapContactSender) EmptyContacts() (uint, error) {
-	body := map[string]any{
-		"using": []string{JmapCore, JmapContacts},
-		"methodCalls": []any{
-			[]any{
-				"ContactCard/query",
-				map[string]any{
-					"accountId": j.accountId,
-					"filter": map[string]any{
-						"inAddressBook": j.addressbookId,
-					},
-				},
-				"0",
-			},
-		},
-	}
-
-	f, err := command(j.j, body, func(methodResponses []any) (map[string]any, error) {
-		z := methodResponses[0].([]any)
-		return z[1].(map[string]any), nil
-	})
-	if idsObj, ok := f["ids"]; ok {
-		anies := idsObj.([]any)
-		ids := make([]string, len(anies))
-		for i, a := range anies {
-			ids[i] = a.(string)
-		}
-		destroyed := uint(0)
-		for chunk := range slices.Chunk(ids, 20) {
-			err = j.destroy(chunk)
-			if err != nil {
-				return destroyed, err
-			}
-			destroyed += uint(len(chunk))
-		}
-		return destroyed, nil
-	} else {
-		return uint(0), fmt.Errorf("failed to destroy ContactCards: %v", f)
-	}
-}
-
-func (j *JmapContactSender) destroy(ids []string) error {
-	body := map[string]any{
-		"using": []string{JmapCore, JmapContacts},
-		"methodCalls": []any{
-			[]any{
-				"ContactCard/set",
-				map[string]any{
-					"accountId": j.accountId,
-					"destroy":   ids,
-				},
-				"0",
-			},
-		},
-	}
-
-	f, err := command(j.j, body, func(methodResponses []any) (map[string]any, error) {
-		z := methodResponses[0].([]any)
-		return z[1].(map[string]any), nil
-	})
-	if err != nil {
-		return err
-	}
-
-	if x, ok := f["destroyed"]; ok {
-		destroyed := x.([]any)
-		if len(destroyed) == len(ids) {
-			return nil
-		} else {
-			fmt.Println(f)
-			return fmt.Errorf("failed to destroy ContactCards")
-		}
-	} else {
-		if ncx, ok := f["notDestroyed"]; ok {
-			nc := ncx.(map[string]any)
-			c := nc["c"].(map[string]any)
-			return fmt.Errorf("failed to destroy ContactCards: %v", c["description"])
-		} else {
-			fmt.Println(f)
-			return fmt.Errorf("failed to destroy ContactCards")
-		}
-	}
-}
-
-func (j *JmapContactSender) CreateContact(c map[string]any) (string, error) {
-	body := map[string]any{
-		"using": []string{JmapCore, JmapContacts},
-		"methodCalls": []any{
-			[]any{
-				"ContactCard/set",
-				map[string]any{
-					"accountId": j.accountId,
-					"create": map[string]any{
-						"c": c,
-					},
-				},
-				"0",
-			},
-		},
-	}
-	return command(j.j, body, func(methodResponses []any) (string, error) {
-		z := methodResponses[0].([]any)
-		f := z[1].(map[string]any)
-		if x, ok := f["created"]; ok {
-			created := x.(map[string]any)
-			if c, ok := created["c"].(map[string]any); ok {
-				return c["id"].(string), nil
-			} else {
-				fmt.Println(f)
-				return "", fmt.Errorf("failed to create ContactCard")
-			}
-		} else {
-			if ncx, ok := f["notCreated"]; ok {
-				nc := ncx.(map[string]any)
-				c := nc["c"].(map[string]any)
-				return "", fmt.Errorf("failed to create ContactCard: %v", c["description"])
-			} else {
-				fmt.Println(f)
-				return "", fmt.Errorf("failed to create ContactCard")
-			}
-		}
-	})
 }
 
 func command[T any](j *Jmap, body map[string]any, closure func([]any) (T, error)) (T, error) {
@@ -631,4 +208,152 @@ func command[T any](j *Jmap, body map[string]any, closure func([]any) (T, error)
 
 	methodResponses := r["methodResponses"].([]any)
 	return closure(methodResponses)
+}
+
+func create(j *Jmap, id string, objectType string, body map[string]any) (string, error) {
+	return command(j, body, func(methodResponses []any) (string, error) {
+		z := methodResponses[0].([]any)
+		f := z[1].(map[string]any)
+		if x, ok := f["created"]; ok {
+			created := x.(map[string]any)
+			if c, ok := created[id].(map[string]any); ok {
+				return c["id"].(string), nil
+			} else {
+				fmt.Println(f)
+				return "", fmt.Errorf("failed to create %v", objectType)
+			}
+		} else {
+			if ncx, ok := f["notCreated"]; ok {
+				nc := ncx.(map[string]any)
+				c := nc[id].(map[string]any)
+				return "", fmt.Errorf("failed to create %v: %v", objectType, c["description"])
+			} else {
+				fmt.Println(f)
+				return "", fmt.Errorf("failed to create %v", objectType)
+			}
+		}
+	})
+}
+
+func destroy(j *Jmap, accountId string, objectType string, scope string, ids []string) error {
+	body := map[string]any{
+		"using": []string{JmapCore, scope},
+		"methodCalls": []any{
+			[]any{
+				objectType + "/set",
+				map[string]any{
+					"accountId": accountId,
+					"destroy":   ids,
+				},
+				"0",
+			},
+		},
+	}
+
+	f, err := command(j, body, func(methodResponses []any) (map[string]any, error) {
+		z := methodResponses[0].([]any)
+		return z[1].(map[string]any), nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if x, ok := f["destroyed"]; ok {
+		destroyed := x.([]any)
+		if len(destroyed) == len(ids) {
+			return nil
+		} else {
+			return fmt.Errorf("failed to destroy %ss: %v", objectType, f)
+		}
+	} else {
+		if ncx, ok := f["notDestroyed"]; ok {
+			nc := ncx.(map[string]any)
+			for id, setErrorObj := range nc {
+				setError := setErrorObj.(map[string]any)
+				if description, ok := setError["description"]; ok {
+					return fmt.Errorf("failed to destroy %ss: %s: %v", objectType, id, description)
+				}
+			}
+			keys := make([]string, len(nc))
+			i := 0
+			for k := range nc {
+				keys[i] = k
+				i++
+			}
+			return fmt.Errorf("failed to destroy %ss: [%s]", objectType, strings.Join(keys, ", "))
+		} else {
+			return fmt.Errorf("failed to destroy %ss: %v", objectType, f)
+		}
+	}
+}
+
+func empty(j *Jmap, accountId string, objectType string, scope string, filter map[string]any, destroyer func([]string) error) (uint, error) {
+	body := map[string]any{
+		"using": []string{JmapCore, scope},
+		"methodCalls": []any{
+			[]any{
+				objectType + "/query",
+				map[string]any{
+					"accountId": accountId,
+					"filter":    filter,
+				},
+				"0",
+			},
+		},
+	}
+
+	f, err := command(j, body, func(methodResponses []any) (map[string]any, error) {
+		z := methodResponses[0].([]any)
+		return z[1].(map[string]any), nil
+	})
+	if idsObj, ok := f["ids"]; ok {
+		anies := idsObj.([]any)
+		ids := make([]string, len(anies))
+		for i, a := range anies {
+			ids[i] = a.(string)
+		}
+		destroyed := uint(0)
+		for chunk := range slices.Chunk(ids, 20) {
+			err = destroyer(chunk)
+			if err != nil {
+				return destroyed, err
+			}
+			destroyed += uint(len(chunk))
+		}
+		return destroyed, nil
+	} else {
+		return uint(0), fmt.Errorf("failed to destroy %vs: %v", objectType, f)
+	}
+}
+
+func objectsById(j *Jmap, accountId string, objectType string, scope string) (map[string]map[string]any, error) {
+	m := map[string]map[string]any{}
+	{
+		body := map[string]any{
+			"using": []string{JmapCore, scope},
+			"methodCalls": []any{
+				[]any{
+					objectType + "/get",
+					map[string]any{
+						"accountId": accountId,
+					},
+					"0",
+				},
+			},
+		}
+		result, err := command(j, body, func(methodResponses []any) ([]any, error) {
+			z := methodResponses[0].([]any)
+			f := z[1].(map[string]any)
+			return f["list"].([]any), nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, a := range result {
+			obj := a.(map[string]any)
+			id := obj["id"].(string)
+			m[id] = obj
+		}
+	}
+	return m, nil
 }

@@ -23,7 +23,7 @@ func GenerateContacts(
 	count uint,
 	printer func(string),
 ) error {
-	var s *jmap.JmapContactSender = nil
+	var s *jmap.ContactSender = nil
 	{
 		u, err := url.Parse(jmapUrl)
 		if err != nil {
@@ -36,7 +36,7 @@ func GenerateContacts(
 		}
 		defer j.Close()
 
-		s, err = jmap.NewJmapContactSender(j, accountId, addressbookId)
+		s, err = jmap.NewContactSender(j, accountId, addressbookId)
 		if err != nil {
 			return err
 		}
