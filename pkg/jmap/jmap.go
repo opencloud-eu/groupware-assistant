@@ -198,8 +198,8 @@ func (j *JmapEmailSender) Close() error {
 	return nil
 }
 
-func (j *JmapEmailSender) NewEmail() (*JmapEmailBuilder, error) {
-	return newJmapEmailBuilder(j.accountId, j.mailboxId)
+func (j *JmapEmailSender) NewEmail() (*EmailBuilder, error) {
+	return newEmailBuilder(j.accountId, j.mailboxId)
 }
 
 func (j *JmapEmailSender) EmptyEmails() (int, error) {
@@ -298,7 +298,7 @@ func (j *Jmap) uploadBlob(accountId string, data []byte, mimetype string) (uploa
 	return result, nil
 }
 
-func (j *JmapEmailSender) SendEmail(e *JmapEmailBuilder) (string, error) {
+func (j *JmapEmailSender) SendEmail(e *EmailBuilder) (string, error) {
 	bodyValues := map[string]map[string]any{}
 	if e.text != "" {
 		bodyValues["t"] = map[string]any{"value": e.text}

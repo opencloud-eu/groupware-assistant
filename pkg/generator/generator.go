@@ -17,20 +17,20 @@ import (
 	"opencloud.eu/groupware-assistant/pkg/tools"
 )
 
-func htmlFormat(body string, b *jmap.JmapEmailBuilder) {
+func htmlFormat(body string, b *jmap.EmailBuilder) {
 	b.HTML(body)
 }
 
-func textFormat(body string, b *jmap.JmapEmailBuilder) {
+func textFormat(body string, b *jmap.EmailBuilder) {
 	b.Text(body)
 }
 
-func bothFormat(body string, b *jmap.JmapEmailBuilder) {
+func bothFormat(body string, b *jmap.EmailBuilder) {
 	htmlFormat(body, b)
 	textFormat(body, b)
 }
 
-var formats = []func(string, *jmap.JmapEmailBuilder){
+var formats = []func(string, *jmap.EmailBuilder){
 	htmlFormat,
 	textFormat,
 	bothFormat,
