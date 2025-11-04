@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -12,7 +13,7 @@ const (
 )
 
 func ToHtml(text string) string {
-	return strings.Join(HtmlJoin(SplitParas(text)), "\n")
+	return "<!DOCTYPE html><html><body>" + strings.Join(HtmlJoin(SplitParas(text)), "\n") + "</body></html>"
 }
 
 func SplitParas(text string) []string {
@@ -47,4 +48,23 @@ func ToBoolMapS(s ...string) map[string]bool {
 
 func PickRandom[T any](s ...T) T {
 	return s[rand.IntN(len(s))]
+}
+
+func PickRandoms[T any](s ...T) []T {
+	n := rand.IntN(len(s))
+	if n == 0 {
+		return []T{}
+	}
+	result := make([]T, n)
+	o := make([]T, len(s))
+	copy(o, s)
+	for i := range n {
+		p := rand.IntN(len(o))
+		result[i] = slices.Delete(o, p, p)[0]
+	}
+	return result
+}
+
+func PickLanguage() string {
+	return PickRandom("en-US", "en-GB", "en-AU")
 }

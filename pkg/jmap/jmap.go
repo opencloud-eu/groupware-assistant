@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+
+	"github.com/tidwall/pretty"
 )
 
 const (
@@ -50,9 +52,10 @@ type Jmap struct {
 	session  Session
 	u        *url.URL
 	trace    bool
+	color    bool
 }
 
-func NewJmap(baseurl *url.URL, username string, password string, trace bool) (*Jmap, error) {
+func NewJmap(baseurl *url.URL, username string, password string, trace bool, color bool) (*Jmap, error) {
 	httpTransport := http.DefaultTransport.(*http.Transport).Clone()
 	tlsConfig := &tls.Config{InsecureSkipVerify: true}
 	httpTransport.TLSClientConfig = tlsConfig
@@ -77,20 +80,34 @@ func NewJmap(baseurl *url.URL, username string, password string, trace bool) (*J
 		if err != nil {
 			return nil, err
 		}
+		defer resp.Body.Close()
+		var response []byte = nil
 		if trace {
-			if b, err := httputil.DumpResponse(resp, true); err == nil {
-				log.Printf("<== %s\n", string(b))
+			if b, err := httputil.DumpResponse(resp, false); err == nil {
+				response, err = io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, err
+				}
+				p := pretty.Pretty(response)
+				if color {
+					p = pretty.Color(p, nil)
+				}
+				log.Printf("<== %s%s\n", b, p)
 			}
 		}
 		if resp.StatusCode >= 300 {
-			return nil, fmt.Errorf("status is %s", resp.Status)
+			return nil, fmt.Errorf("JMAP command HTTP response status is %s", resp.Status)
 		}
-		body, err := io.ReadAll(resp.Body)
-		defer resp.Body.Close()
+		if response == nil {
+			response, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
-		err = json.Unmarshal(body, &session)
+		err = json.Unmarshal(response, &session)
 		if err != nil {
 			return nil, err
 		}
@@ -134,22 +151,33 @@ func (j *Jmap) uploadBlob(accountId string, data []byte, mimetype string) (uploa
 	if err != nil {
 		return uploadedBlob{}, err
 	}
+	defer res.Body.Close()
+	var response []byte = nil
 	if j.trace {
-		if b, err := httputil.DumpResponse(res, true); err == nil {
-			log.Printf("<== %s\n", string(b))
+		if b, err := httputil.DumpResponse(res, false); err == nil {
+			response, err = io.ReadAll(res.Body)
+			if err != nil {
+				return uploadedBlob{}, err
+			}
+			p := pretty.Pretty(response)
+			if j.color {
+				p = pretty.Color(p, nil)
+			}
+			log.Printf("<== %s%s\n", b, p)
 		}
 	}
 	if res.StatusCode < 200 || res.StatusCode > 299 {
 		return uploadedBlob{}, fmt.Errorf("status is %s", res.Status)
 	}
-	defer res.Body.Close()
-	responseBody, err := io.ReadAll(res.Body)
-	if err != nil {
-		return uploadedBlob{}, err
+	if response == nil {
+		response, err = io.ReadAll(res.Body)
+		if err != nil {
+			return uploadedBlob{}, err
+		}
 	}
 
 	var result uploadedBlob
-	err = json.Unmarshal(responseBody, &result)
+	err = json.Unmarshal(response, &result)
 	if err != nil {
 		return uploadedBlob{}, err
 	}
@@ -170,8 +198,12 @@ func command[T any](j *Jmap, body map[string]any, closure func([]any) (T, error)
 	}
 
 	if j.trace {
-		if b, err := httputil.DumpRequestOut(req, true); err == nil {
-			log.Printf("==> %s\n", string(b))
+		if b, err := httputil.DumpRequestOut(req, false); err == nil {
+			p := pretty.Pretty(payload)
+			if j.color {
+				p = pretty.Color(p, nil)
+			}
+			log.Printf("==> %s%s\n", b, p)
 		}
 	}
 
@@ -180,30 +212,35 @@ func command[T any](j *Jmap, body map[string]any, closure func([]any) (T, error)
 	if err != nil {
 		return zero, err
 	}
+	defer resp.Body.Close()
+	var response []byte = nil
 	if j.trace {
-		if b, err := httputil.DumpResponse(resp, true); err == nil {
-			log.Printf("<== %s\n", string(b))
+		if b, err := httputil.DumpResponse(resp, false); err == nil {
+			response, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return zero, err
+			}
+			p := pretty.Pretty(payload)
+			if j.color {
+				p = pretty.Color(p, nil)
+			}
+			log.Printf("<== %s%s\n", b, p)
 		}
 	}
 	if resp.StatusCode >= 300 {
 		return zero, fmt.Errorf("JMAP command HTTP response status is %s", resp.Status)
 	}
-	defer resp.Body.Close()
-	response, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return zero, err
+	if response == nil {
+		response, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return zero, err
+		}
 	}
 
 	r := map[string]any{}
 	err = json.Unmarshal(response, &r)
 	if err != nil {
 		return zero, err
-	}
-
-	if j.trace {
-		if b, err := httputil.DumpResponse(resp, true); err == nil {
-			log.Printf("<== %s\n", string(b))
-		}
 	}
 
 	methodResponses := r["methodResponses"].([]any)
@@ -344,7 +381,11 @@ func objectsById(j *Jmap, accountId string, objectType string, scope string) (ma
 		result, err := command(j, body, func(methodResponses []any) ([]any, error) {
 			z := methodResponses[0].([]any)
 			f := z[1].(map[string]any)
-			return f["list"].([]any), nil
+			if list, ok := f["list"]; ok {
+				return list.([]any), nil
+			} else {
+				return nil, fmt.Errorf("methodResponse[1] has no 'list' attribute: %v", f)
+			}
 		})
 		if err != nil {
 			return nil, err

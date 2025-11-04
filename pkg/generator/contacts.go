@@ -15,6 +15,7 @@ import (
 func GenerateContacts(
 	jmapUrl string,
 	trace bool,
+	color bool,
 	username string,
 	password string,
 	accountId string,
@@ -30,7 +31,7 @@ func GenerateContacts(
 			return err
 		}
 
-		j, err := jmap.NewJmap(u, username, password, trace)
+		j, err := jmap.NewJmap(u, username, password, trace, color)
 		if err != nil {
 			return err
 		}
@@ -62,7 +63,7 @@ func GenerateContacts(
 			"version":        "1.0",
 			"addressBookIds": tools.ToBoolMap([]string{s.AddressBook()}),
 			"prodId":         tools.ProductName,
-			"language":       tools.PickRandom("en-US", "en-GB", "en-AU"),
+			"language":       tools.PickLanguage(),
 		}
 
 		contact["@type"] = "individual"

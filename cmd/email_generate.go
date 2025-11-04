@@ -110,6 +110,7 @@ var emailGenerateCmd = &cobra.Command{
 		return generator.GenerateEmails(
 			JmapUrl,
 			Trace,
+			Color,
 			emojis,
 			Username,
 			Password,

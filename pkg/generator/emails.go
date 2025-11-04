@@ -19,6 +19,7 @@ import (
 func GenerateEmails(
 	jmapUrl string,
 	trace bool,
+	color bool,
 	emojis bool,
 	username string,
 	password string,
@@ -68,7 +69,7 @@ func GenerateEmails(
 			return err
 		}
 
-		j, err := jmap.NewJmap(u, username, password, trace)
+		j, err := jmap.NewJmap(u, username, password, trace, color)
 		if err != nil {
 			return err
 		}

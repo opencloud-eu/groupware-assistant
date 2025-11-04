@@ -29,6 +29,7 @@ var (
 	Password  string
 	AccountId string
 	Trace     bool
+	Color     bool
 )
 
 func init() {
@@ -37,4 +38,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&Password, "password", "p", "demo", "JMAP basic authentication password")
 	rootCmd.PersistentFlags().StringVarP(&AccountId, "account-id", "A", "", "JMAP account ID to use, default behavior is to use the default account")
 	rootCmd.PersistentFlags().BoolVar(&Trace, "trace", false, "Show JMAP HTTP traffic")
+	rootCmd.PersistentFlags().BoolVar(&Color, "color", true, "Show JMAP HTTP traffic in color")
 }

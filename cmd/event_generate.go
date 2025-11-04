@@ -7,7 +7,7 @@ import (
 	"opencloud.eu/groupware-assistant/pkg/generator"
 )
 
-var contactGenerateCmd = &cobra.Command{
+var eventGenerateCmd = &cobra.Command{
 	Use: "generate",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		count, err := cmd.Flags().GetUint("count")
@@ -18,12 +18,12 @@ var contactGenerateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		addressbookId, err := cmd.Flags().GetString("addressbook-id")
+		calendarId, err := cmd.Flags().GetString("calendar-id")
 		if err != nil {
 			return err
 		}
 
-		return generator.GenerateContacts(
+		return generator.GenerateEvents(
 			JmapUrl,
 			Trace,
 			Color,
@@ -31,7 +31,7 @@ var contactGenerateCmd = &cobra.Command{
 			Password,
 			AccountId,
 			empty,
-			addressbookId,
+			calendarId,
 			count,
 			func(text string) { fmt.Println(text) },
 		)
@@ -39,9 +39,9 @@ var contactGenerateCmd = &cobra.Command{
 }
 
 func init() {
-	contactCmd.AddCommand(contactGenerateCmd)
+	eventCmd.AddCommand(eventGenerateCmd)
 
-	contactGenerateCmd.Flags().UintP("count", "c", 20, "How many emails to add to the folder")
-	contactGenerateCmd.Flags().BoolP("empty", "E", false, "Whether to empty the folder before adding emails to it")
-	contactGenerateCmd.Flags().String("addressbook-id", "", "ID of the JMAP AddressBook to use")
+	eventGenerateCmd.Flags().UintP("count", "c", 20, "How many emails to add to the folder")
+	eventGenerateCmd.Flags().BoolP("empty", "E", false, "Whether to empty the folder before adding emails to it")
+	eventGenerateCmd.Flags().String("calendar-id", "", "ID of the JMAP Calendar to use")
 }
