@@ -65,6 +65,18 @@ func PickRandoms[T any](s ...T) []T {
 	return result
 }
 
+func PickRandoms1[T any](s ...T) []T {
+	n := 1 + rand.IntN(len(s)-1)
+	result := make([]T, n)
+	o := make([]T, len(s))
+	copy(o, s)
+	for i := range n {
+		p := rand.IntN(len(o))
+		result[i] = slices.Delete(o, p, p)[0]
+	}
+	return result
+}
+
 func PickLanguage() string {
 	return PickRandom("en-US", "en-GB", "en-AU")
 }

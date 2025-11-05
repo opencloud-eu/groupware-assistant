@@ -98,7 +98,7 @@ func GenerateEvents(
 			"links": map[string]map[string]any{
 				linkId: {
 					"@type":       "Link",
-					"href":        "https://picsum.photos/id/" + strconv.Itoa(1+rand.IntN(200)) + "/200/300",
+					"href":        picsum(300, 200),
 					"rel":         "about",
 					"contentType": "image/jpeg",
 				},

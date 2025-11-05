@@ -123,6 +123,7 @@ func NewJmap(baseurl *url.URL, username string, password string, trace bool, col
 	return &Jmap{
 		h:        h,
 		trace:    trace,
+		color:    color,
 		username: username,
 		password: password,
 		session:  session,
@@ -222,7 +223,7 @@ func command[T any](j *Jmap, body map[string]any, closure func([]any) (T, error)
 			if err != nil {
 				return zero, err
 			}
-			p := pretty.Pretty(payload)
+			p := pretty.Pretty(response)
 			if j.color {
 				p = pretty.Color(p, nil)
 			}

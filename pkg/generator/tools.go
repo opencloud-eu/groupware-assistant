@@ -145,7 +145,7 @@ func createNickName(_ *gofakeit.PersonInfo) map[string]any {
 	return map[string]any{
 		"@type":   "Name",
 		"name":    gofakeit.PetName(),
-		"context": tools.ToBoolMap(tools.PickRandom([]string{"work"}, []string{"work", "private"})),
+		"context": tools.ToBoolMap(tools.PickRandoms("work", "private")),
 	}
 }
 
@@ -154,7 +154,7 @@ func createEmail(person *gofakeit.PersonInfo, pref int) map[string]any {
 	return map[string]any{
 		"@type":   "EmailAddress",
 		"address": email,
-		"context": tools.ToBoolMap(tools.PickRandom([]string{"work"}, []string{"work", "private"})),
+		"context": tools.ToBoolMap(tools.PickRandoms("work", "private")),
 		"label":   strings.ToLower(person.FirstName),
 		"pref":    pref,
 	}
@@ -164,7 +164,7 @@ func createSecondaryEmail(email string, pref int) map[string]any {
 	return map[string]any{
 		"@type":   "EmailAddress",
 		"address": email,
-		"context": tools.ToBoolMap(tools.PickRandom([]string{"work"}, []string{"work", "private"})),
+		"context": tools.ToBoolMap(tools.PickRandoms("work", "private")),
 		"pref":    pref,
 	}
 }
@@ -373,4 +373,31 @@ var Categories = []string{
 
 func categories() map[string]bool {
 	return tools.ToBoolMap(tools.PickRandoms(Categories...))
+}
+
+func propmap(container map[string]any, name string, min int, max int, generator func(int, string) (map[string]any, error)) error {
+	n := min + rand.IntN(max-min+1)
+	if n < 1 {
+		return nil
+	}
+
+	m := make(map[string]map[string]any, n)
+	for i := range n {
+		id := id()
+		item, err := generator(i, id)
+		if err != nil {
+			return err
+		}
+		if item != nil {
+			m[id] = item
+		}
+	}
+	if len(m) > 0 {
+		container[name] = m
+	}
+	return nil
+}
+
+func picsum(w, h int) string {
+	return fmt.Sprintf("https://picsum.photos/id/%d/%d/%d", 1+rand.IntN(200), h, w)
 }
