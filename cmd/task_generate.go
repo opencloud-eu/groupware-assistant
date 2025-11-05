@@ -7,7 +7,7 @@ import (
 	"opencloud.eu/groupware-assistant/pkg/generator"
 )
 
-var contactGenerateCmd = &cobra.Command{
+var taskGenerateCmd = &cobra.Command{
 	Use: "generate",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		count, err := cmd.Flags().GetUint("count")
@@ -18,12 +18,12 @@ var contactGenerateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		addressbookId, err := cmd.Flags().GetString("addressbook-id")
+		tasklistId, err := cmd.Flags().GetString("tasklist-id")
 		if err != nil {
 			return err
 		}
 
-		return generator.GenerateContacts(
+		return generator.GenerateTasks(
 			JmapUrl,
 			Trace,
 			Color,
@@ -31,7 +31,7 @@ var contactGenerateCmd = &cobra.Command{
 			Password,
 			AccountId,
 			empty,
-			addressbookId,
+			tasklistId,
 			count,
 			func(text string) { fmt.Println(text) },
 		)
@@ -39,9 +39,9 @@ var contactGenerateCmd = &cobra.Command{
 }
 
 func init() {
-	contactCmd.AddCommand(contactGenerateCmd)
+	taskCmd.AddCommand(taskGenerateCmd)
 
-	contactGenerateCmd.Flags().UintP("count", "c", 20, "How many contacts to add to the address book")
-	contactGenerateCmd.Flags().BoolP("empty", "E", false, "Whether to empty the address book before adding contacts to it")
-	contactGenerateCmd.Flags().String("addressbook-id", "", "ID of the JMAP AddressBook to use")
+	taskGenerateCmd.Flags().UintP("count", "c", 20, "How many tasks to add to the tasklist")
+	taskGenerateCmd.Flags().BoolP("empty", "E", false, "Whether to empty the tasklist before adding tasks to it")
+	taskGenerateCmd.Flags().String("tasklist-id", "", "ID of the JMAP TaskList to use")
 }

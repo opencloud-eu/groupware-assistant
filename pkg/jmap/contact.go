@@ -4,6 +4,9 @@ import (
 	"fmt"
 )
 
+var AddressBookObjectType = "AddressBook"
+var ContactCardObjectType = "ContactCard"
+
 type ContactSender struct {
 	j             *Jmap
 	accountId     string
@@ -27,7 +30,7 @@ func NewContactSender(j *Jmap, accountId string, addressbookId string) (*Contact
 		}
 	}
 
-	addressbooksById, err := objectsById(j, accountId, "AddressBook", JmapContacts)
+	addressbooksById, err := objectsById(j, accountId, AddressBookObjectType, JmapContacts)
 	if err != nil {
 		return nil, err
 	}
@@ -61,13 +64,13 @@ func (s *ContactSender) Close() error {
 }
 
 func (s *ContactSender) EmptyContacts() (uint, error) {
-	return empty(s.j, s.accountId, "ContactCard", JmapContacts, map[string]any{
+	return empty(s.j, s.accountId, ContactCardObjectType, JmapContacts, map[string]any{
 		"inAddressBook": s.addressbookId,
 	}, s.destroy)
 }
 
 func (s *ContactSender) destroy(ids []string) error {
-	return destroy(s.j, s.accountId, "ContactCard", JmapContacts, ids)
+	return destroy(s.j, s.accountId, ContactCardObjectType, JmapContacts, ids)
 }
 
 func (s *ContactSender) CreateContact(c map[string]any) (string, error) {
@@ -75,7 +78,7 @@ func (s *ContactSender) CreateContact(c map[string]any) (string, error) {
 		"using": []string{JmapCore, JmapContacts},
 		"methodCalls": []any{
 			[]any{
-				"ContactCard/set",
+				ContactCardObjectType + "/set",
 				map[string]any{
 					"accountId": s.accountId,
 					"create": map[string]any{
@@ -86,5 +89,5 @@ func (s *ContactSender) CreateContact(c map[string]any) (string, error) {
 			},
 		},
 	}
-	return create(s.j, "c", "ContactCard", body)
+	return create(s.j, "c", ContactCardObjectType, body)
 }

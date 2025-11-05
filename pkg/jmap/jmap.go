@@ -21,6 +21,7 @@ const (
 	JmapMail      = "urn:ietf:params:jmap:mail"
 	JmapContacts  = "urn:ietf:params:jmap:contacts"
 	JmapCalendars = "urn:ietf:params:jmap:calendars"
+	JmapTasks     = "urn:ietf:params:jmap:tasks"
 
 	EmailDeletionChunkSize = 20
 )
@@ -35,6 +36,7 @@ type SessionPrimaryAccounts struct {
 	Mail      string `json:"urn:ietf:params:jmap:mail,omitempty"`
 	Contact   string `json:"urn:ietf:params:jmap:contacts,omitempty"`
 	Calendars string `json:"urn:ietf:params:jmap:calendars,omitempty"`
+	Tasks     string `json:"urn:ietf:params:jmap:tasks,omitempty"`
 }
 
 type Session struct {
