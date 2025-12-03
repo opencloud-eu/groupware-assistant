@@ -34,7 +34,7 @@ type Account struct {
 
 type SessionPrimaryAccounts struct {
 	Mail      string `json:"urn:ietf:params:jmap:mail,omitempty"`
-	Contact   string `json:"urn:ietf:params:jmap:contacts,omitempty"`
+	Contacts  string `json:"urn:ietf:params:jmap:contacts,omitempty"`
 	Calendars string `json:"urn:ietf:params:jmap:calendars,omitempty"`
 	Tasks     string `json:"urn:ietf:params:jmap:tasks,omitempty"`
 }
@@ -259,7 +259,6 @@ func create(j *Jmap, id string, objectType string, body map[string]any) (string,
 			if c, ok := created[id].(map[string]any); ok {
 				return c["id"].(string), nil
 			} else {
-				fmt.Println(f)
 				return "", fmt.Errorf("failed to create %v", objectType)
 			}
 		} else {
@@ -268,7 +267,6 @@ func create(j *Jmap, id string, objectType string, body map[string]any) (string,
 				c := nc[id].(map[string]any)
 				return "", fmt.Errorf("failed to create %v: %v", objectType, c["description"])
 			} else {
-				fmt.Println(f)
 				return "", fmt.Errorf("failed to create %v", objectType)
 			}
 		}

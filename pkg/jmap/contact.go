@@ -20,7 +20,7 @@ func (s *ContactSender) AddressBook() string {
 func NewContactSender(j *Jmap, accountId string, addressbookId string) (*ContactSender, error) {
 	if accountId == "" {
 		// use default mail account
-		accountId = j.session.PrimaryAccounts.Contact
+		accountId = j.session.PrimaryAccounts.Contacts
 		if accountId == "" {
 			return nil, fmt.Errorf("session has no matching primary account")
 		}

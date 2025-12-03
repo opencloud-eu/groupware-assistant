@@ -64,7 +64,7 @@ func GenerateEvents(
 		virtualLocationId, virtualLocation := createVirtualLocation()
 		alertId := id()
 		participants, organizerEmail := createParticipants(locationId, virtualLocationId)
-		alertOffset := tools.PickRandom("PT-5M", "PT-10M", "PT-15M")
+		alertOffset := tools.PickRandom("-PT5M", "-PT10M", "-PT15M")
 		duration := tools.PickRandom("PT30M", "PT45M", "PT1H", "PT90M")
 		tz := tools.PickRandom("Europe/Paris", "Europe/Brussels", "Europe/Berlin")
 		daysDiff := rand.IntN(31) - 15
