@@ -5,7 +5,9 @@ import (
 )
 
 var contactCmd = &cobra.Command{
-	Use: "contact",
+	Use:     "contact",
+	Aliases: []string{"contacts"},
+	Short:   "Operations on Contacts within Address Books",
 }
 
 func init() {

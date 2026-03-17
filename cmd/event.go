@@ -5,7 +5,9 @@ import (
 )
 
 var eventCmd = &cobra.Command{
-	Use: "event",
+	Use:     "event",
+	Aliases: []string{"events"},
+	Short:   "Operations on Events within Calendars",
 }
 
 func init() {

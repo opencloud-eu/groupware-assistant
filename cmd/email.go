@@ -5,8 +5,10 @@ import (
 )
 
 var emailCmd = &cobra.Command{
-	Use:     "email",
-	Aliases: []string{"em", "emails"},
+	Use:        "email",
+	Aliases:    []string{"em", "emails"},
+	SuggestFor: []string{"mail", "mails"},
+	Short:      "Operations on Emails",
 }
 
 func init() {

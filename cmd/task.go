@@ -5,7 +5,9 @@ import (
 )
 
 var taskCmd = &cobra.Command{
-	Use: "task",
+	Use:     "task",
+	Aliases: []string{"tasks"},
+	Short:   "Operations on Tasks within Tasklists",
 }
 
 func init() {

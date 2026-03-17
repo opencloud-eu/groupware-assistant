@@ -1,11 +1,118 @@
 package jmap
 
 import (
+	"encoding/json"
 	"fmt"
 )
 
 const CalendarObjectType = "Calendar"
 const EventObjectType = "CalendarEvent"
+
+type CalendarRights struct {
+	MayAdmin         bool `json:"mayAdmin"`
+	MayDelete        bool `json:"mayDelete"`
+	MayReadFreeBusy  bool `json:"mayReadFreeBusy"`
+	MayReadItems     bool `json:"mayReadItems"`
+	MayWriteAll      bool `json:"mayWriteAll"`
+	MayWriteOwn      bool `json:"mayWriteOwn"`
+	MayUpdatePrivate bool `json:"mayUpdatePrivate"`
+	MayRSVP          bool `json:"mayRSVP"`
+}
+
+type Calendar struct {
+	Id           string `json:"id,omitempty"`
+	Name         string `json:"name"`
+	Description  string `json:"description,omitempty"`
+	IsDefault    bool   `json:"isDefault,omitzero"`
+	IsSubscribed bool   `json:"isSubscribed"`
+	IsVisible    bool   `json:"isVisible"`
+	// IncludeInAvailability string         `json:"includeInAvailablity"`
+	TimeZone  string         `json:"timeZone"`
+	Color     string         `json:"color"`
+	SortOrder int            `json:"sortOrder"`
+	MyRights  CalendarRights `json:"myRights"`
+}
+
+type NewCalendar struct {
+	Name         string `json:"name"`
+	Description  string `json:"description,omitempty"`
+	IsSubscribed bool   `json:"isSubscribed"`
+	IsVisible    bool   `json:"isVisible"`
+	TimeZone     string `json:"timeZone,omitempty"`
+	Color        string `json:"color,omitempty"`
+	SortOrder    int    `json:"sortOrder,omitzero"`
+}
+
+func ListCalendars(j *Jmap, accountId string) ([]Calendar, error) {
+	if accountId == "" {
+		// use default mail account
+		accountId = j.session.PrimaryAccounts.Calendars
+		if accountId == "" {
+			return nil, fmt.Errorf("session has no matching primary account")
+		}
+	} else {
+		if _, ok := j.session.Accounts[accountId]; !ok {
+			return nil, fmt.Errorf("account ID '%s' does not exist in session", accountId)
+		}
+	}
+	return objects[Calendar](j, accountId, CalendarObjectType, JmapCalendars)
+}
+
+func CreateCalendar(j *Jmap, accountId string, cal NewCalendar) (string, error) {
+	if accountId == "" {
+		// use default mail account
+		accountId = j.session.PrimaryAccounts.Calendars
+		if accountId == "" {
+			return "", fmt.Errorf("session has no matching primary account")
+		}
+	} else {
+		if _, ok := j.session.Accounts[accountId]; !ok {
+			return "", fmt.Errorf("account ID '%s' does not exist in session", accountId)
+		}
+	}
+	b, err := json.Marshal(cal)
+	if err != nil {
+		return "", err
+	}
+	var m map[string]any
+	err = json.Unmarshal(b, &m)
+	if err != nil {
+		return "", err
+	}
+
+	body := map[string]any{
+		"using": []string{JmapCore, JmapCalendars},
+		"methodCalls": []any{
+			[]any{
+				CalendarObjectType + "/set",
+				map[string]any{
+					"accountId": accountId,
+					"create": map[string]any{
+						"c": m,
+					},
+				},
+				"0",
+			},
+		},
+	}
+
+	return create(j, "c", CalendarObjectType, body)
+}
+
+func DeleteCalendar(j *Jmap, accountId string, id string) error {
+	if accountId == "" {
+		// use default mail account
+		accountId = j.session.PrimaryAccounts.Calendars
+		if accountId == "" {
+			return fmt.Errorf("session has no matching primary account")
+		}
+	} else {
+		if _, ok := j.session.Accounts[accountId]; !ok {
+			return fmt.Errorf("account ID '%s' does not exist in session", accountId)
+		}
+	}
+	return destroy(j, accountId, CalendarObjectType, JmapCalendars, []string{id})
+}
 
 type EventSender struct {
 	j          *Jmap
