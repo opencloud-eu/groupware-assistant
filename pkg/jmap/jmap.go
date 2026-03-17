@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/tidwall/pretty"
 )
 
@@ -133,6 +134,10 @@ func NewJmap(baseurl *url.URL, username string, password string, trace bool, col
 
 func (j *Jmap) Close() error {
 	return nil
+}
+
+func (j *Jmap) Session() Session {
+	return j.session
 }
 
 type uploadedBlob struct {
@@ -398,4 +403,49 @@ func objectsById(j *Jmap, accountId string, objectType string, scope string) (ma
 		}
 	}
 	return m, nil
+}
+
+func objects[T any](j *Jmap, accountId string, objectType string, scope string) ([]T, error) {
+	body := map[string]any{
+		"using": []string{JmapCore, scope},
+		"methodCalls": []any{
+			[]any{
+				objectType + "/get",
+				map[string]any{
+					"accountId": accountId,
+				},
+				"0",
+			},
+		},
+	}
+	result, err := command(j, body, func(methodResponses []any) ([]any, error) {
+		z := methodResponses[0].([]any)
+		f := z[1].(map[string]any)
+		if list, ok := f["list"]; ok {
+			return list.([]any), nil
+		} else {
+			return nil, fmt.Errorf("methodResponse[1] has no 'list' attribute: %v", f)
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var target []T
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Metadata:             nil,
+		Result:               &target,
+		ErrorUnused:          false,
+		ErrorUnset:           false,
+		IgnoreUntaggedFields: false,
+		Squash:               true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := decoder.Decode(result); err != nil {
+		return nil, err
+	} else {
+		return target, nil
+	}
 }

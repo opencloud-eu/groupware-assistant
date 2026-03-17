@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -31,6 +32,10 @@ var (
 	Trace     bool
 	Color     bool
 )
+
+var baseStyle = lipgloss.NewStyle().
+	BorderStyle(lipgloss.NormalBorder()).
+	BorderForeground(lipgloss.Color("240"))
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&JmapUrl, "url", "b", "https://stalwart.opencloud.test", "JMAP base URL")

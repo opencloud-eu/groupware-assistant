@@ -5,7 +5,8 @@ import (
 )
 
 var emailCmd = &cobra.Command{
-	Use: "email",
+	Use:     "email",
+	Aliases: []string{"em", "emails"},
 }
 
 func init() {

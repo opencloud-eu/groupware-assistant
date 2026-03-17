@@ -80,3 +80,20 @@ func PickRandoms1[T any](s ...T) []T {
 func PickLanguage() string {
 	return PickRandom("en-US", "en-GB", "en-AU")
 }
+
+func MappedLen[T any](elements []T, mapper func(T) string) int {
+	m := 0
+	for _, elem := range elements {
+		m = max(m, len(mapper(elem)))
+	}
+	return m
+}
+
+func ToMap[T any, K comparable](list []T, mapper func(T) K) map[K]T {
+	m := make(map[K]T, len(list))
+	for _, e := range list {
+		k := mapper(e)
+		m[k] = e
+	}
+	return m
+}
