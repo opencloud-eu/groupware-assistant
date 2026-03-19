@@ -36,6 +36,7 @@ const (
 	EventObjectType       = "CalendarEvent"
 	EmailObjectType       = "Email"
 	MailboxObjectType     = "Mailbox"
+	PrincipalObjectType   = "Principal"
 )
 
 type Account struct {

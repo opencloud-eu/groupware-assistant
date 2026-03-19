@@ -18,6 +18,7 @@ import (
 
 type ListModel[T any] struct {
 	table       table.Model
+	hasViewport bool
 	viewport    viewport.Model
 	titleStyle  lipgloss.Style
 	bulletStyle lipgloss.Style
@@ -28,11 +29,18 @@ type ListModel[T any] struct {
 func (m ListModel[T]) Init() tea.Cmd { return nil }
 
 func (m ListModel[T]) View() string {
-	return lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		baseStyle.Render(m.table.View()),
-		baseStyle.Render(m.viewport.View()),
-	) + "\n"
+	if m.hasViewport {
+		return lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			baseStyle.Render(m.table.View()),
+			baseStyle.Render(m.viewport.View()),
+		) + "\n"
+	} else {
+		return lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			baseStyle.Render(m.table.View()),
+		) + "\n"
+	}
 }
 
 func (m ListModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -48,17 +56,19 @@ func (m ListModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.table, cmd = m.table.Update(msg)
 	cmds = append(cmds, cmd)
 
-	text := ""
-	row := m.table.SelectedRow()
-	if row != nil {
-		id := strings.TrimSpace(row[0])
-		if a, ok := m.itemsById[id]; ok {
-			text = m.detailer(a, m.titleStyle)
+	if m.hasViewport {
+		text := ""
+		row := m.table.SelectedRow()
+		if row != nil {
+			id := strings.TrimSpace(row[0])
+			if a, ok := m.itemsById[id]; ok {
+				text = m.detailer(a, m.titleStyle)
+			}
 		}
+		m.viewport.SetContent(text)
+		m.viewport, cmd = m.viewport.Update(msg)
+		cmds = append(cmds, cmd)
 	}
-	m.viewport.SetContent(text)
-	m.viewport, cmd = m.viewport.Update(msg)
-	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -154,7 +164,12 @@ func List[T any](
 		table.WithHeight(height),
 	)
 
-	v := viewport.New(40, height+1)
+	var v viewport.Model
+	hasViewport := false
+	if detailer != nil {
+		v = viewport.New(40, height+1)
+		hasViewport = true
+	}
 
 	s := table.DefaultStyles()
 	s.Header = s.Header.
@@ -171,6 +186,7 @@ func List[T any](
 	m := ListModel[T]{
 		table:       t,
 		viewport:    v,
+		hasViewport: hasViewport,
 		titleStyle:  lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.Color("240")),
 		bulletStyle: lipgloss.NewStyle().MarginLeft(1).PaddingRight(1).Foreground(lipgloss.Color("202")),
 		itemsById:   tools.ToMap(list, idMapper),
