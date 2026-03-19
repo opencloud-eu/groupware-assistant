@@ -27,6 +27,17 @@ const (
 	EmailDeletionChunkSize = 20
 )
 
+const (
+	TaskListsObjectType   = "TaskLists"
+	TaskObjectType        = "Task"
+	AddressBookObjectType = "AddressBook"
+	ContactCardObjectType = "ContactCard"
+	CalendarObjectType    = "Calendar"
+	EventObjectType       = "CalendarEvent"
+	EmailObjectType       = "Email"
+	MailboxObjectType     = "Mailbox"
+)
+
 type Account struct {
 	Name       string `json:"name,omitempty"`
 	IsPersonal bool   `json:"isPersonal"`
@@ -138,6 +149,37 @@ func (j *Jmap) Close() error {
 
 func (j *Jmap) Session() Session {
 	return j.session
+}
+
+func (j *Jmap) accountId(accountId string, defaultId func(Session) string) (string, error) {
+	if accountId == "" {
+		// use default mail account
+		accountId = defaultId(j.session)
+		if accountId == "" {
+			return "", fmt.Errorf("session has no matching primary account")
+		}
+	} else {
+		if _, ok := j.session.Accounts[accountId]; !ok {
+			return "", fmt.Errorf("account ID '%s' does not exist in session", accountId)
+		}
+	}
+	return accountId, nil
+}
+
+func (j *Jmap) contactAccountId(accountId string) (string, error) {
+	return j.accountId(accountId, func(s Session) string { return s.PrimaryAccounts.Contacts })
+}
+
+func (j *Jmap) calendarAccountId(accountId string) (string, error) {
+	return j.accountId(accountId, func(s Session) string { return s.PrimaryAccounts.Calendars })
+}
+
+func (j *Jmap) mailAccountId(accountId string) (string, error) {
+	return j.accountId(accountId, func(s Session) string { return s.PrimaryAccounts.Mail })
+}
+
+func (j *Jmap) taskAccountId(accountId string) (string, error) {
+	return j.accountId(accountId, func(s Session) string { return s.PrimaryAccounts.Tasks })
 }
 
 type uploadedBlob struct {
@@ -255,13 +297,31 @@ func command[T any](j *Jmap, body map[string]any, closure func([]any) (T, error)
 	return closure(methodResponses)
 }
 
-func create(j *Jmap, id string, objectType string, body map[string]any) (string, error) {
+func createBody(accountId string, objectType string, scope string, body map[string]any) map[string]any {
+	return map[string]any{
+		"using": []string{JmapCore, scope},
+		"methodCalls": []any{
+			[]any{
+				objectType + "/set",
+				map[string]any{
+					"accountId": accountId,
+					"create": map[string]any{
+						"c": body,
+					},
+				},
+				"0",
+			},
+		},
+	}
+}
+
+func create(j *Jmap, objectType string, body map[string]any) (string, error) {
 	return command(j, body, func(methodResponses []any) (string, error) {
 		z := methodResponses[0].([]any)
 		f := z[1].(map[string]any)
 		if x, ok := f["created"]; ok {
 			created := x.(map[string]any)
-			if c, ok := created[id].(map[string]any); ok {
+			if c, ok := created["c"].(map[string]any); ok {
 				return c["id"].(string), nil
 			} else {
 				return "", fmt.Errorf("failed to create %v", objectType)
@@ -269,7 +329,7 @@ func create(j *Jmap, id string, objectType string, body map[string]any) (string,
 		} else {
 			if ncx, ok := f["notCreated"]; ok {
 				nc := ncx.(map[string]any)
-				c := nc[id].(map[string]any)
+				c := nc["c"].(map[string]any)
 				return "", fmt.Errorf("failed to create %v: %v", objectType, c["description"])
 			} else {
 				return "", fmt.Errorf("failed to create %v", objectType)

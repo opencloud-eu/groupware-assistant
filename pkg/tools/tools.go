@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 	"regexp"
@@ -96,4 +97,17 @@ func ToMap[T any, K comparable](list []T, mapper func(T) K) map[K]T {
 		m[k] = e
 	}
 	return m
+}
+
+func Remap(in any) (map[string]any, error) {
+	b, err := json.Marshal(in)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	err = json.Unmarshal(b, &m)
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
 }

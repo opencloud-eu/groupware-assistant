@@ -55,15 +55,32 @@ type SenderGenerator struct {
 	senders []Sender
 }
 
+var domains = []string{
+	".com",
+	".org",
+	".net",
+	".eu",
+	".name",
+}
+
+func addressize(s string) string {
+	return strings.ReplaceAll(strings.ToLower(s), " ", ".")
+}
+
 func newSenderGenerator(numSenders uint) SenderGenerator {
+	if numSenders < 1 {
+		panic(fmt.Errorf("requesting less than 1 sender"))
+	}
 	senders := make([]Sender, numSenders)
 	for i := range numSenders {
 		person := gofakeit.Person()
+		domain := tools.PickRandom(domains...)
+		email := fmt.Sprintf("%s@%s%s", addressize(person.FirstName), addressize(person.LastName), domain)
 		senders[i] = Sender{
 			first:  person.FirstName,
 			last:   person.LastName,
-			from:   person.Contact.Email,
-			sender: person.FirstName + " " + person.LastName + "<" + person.Contact.Email + ">",
+			from:   email,
+			sender: fmt.Sprintf("%s %s <%s>", person.FirstName, person.LastName, email),
 		}
 	}
 	return SenderGenerator{
@@ -125,19 +142,26 @@ func createName(person *gofakeit.PersonInfo) map[string]any {
 	name := map[string]any{
 		"@type": "Name",
 	}
-	components := make([]map[string]string, 2)
-	components[0] = map[string]string{
-		"kind":  "given",
-		"value": person.FirstName,
+	n := rand.IntN(3)
+	switch n {
+	case 0, 1:
+		components := make([]map[string]string, 2)
+		components[0] = map[string]string{
+			"kind":  "given",
+			"value": person.FirstName,
+		}
+		components[1] = map[string]string{
+			"kind":  "surname",
+			"value": person.LastName,
+		}
+		name["components"] = components
+		name["isOrdered"] = true
 	}
-	components[1] = map[string]string{
-		"kind":  "surname",
-		"value": person.LastName,
+	switch n {
+	case 1, 2:
+		name["full"] = fmt.Sprintf("%s %s", person.FirstName, person.LastName)
 	}
-	name["components"] = components
-	name["isOrdered"] = true
 	name["defaultSeparator"] = " "
-	name["full"] = fmt.Sprintf("%s %s", person.FirstName, person.LastName)
 	return name
 }
 

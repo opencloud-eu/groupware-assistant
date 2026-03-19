@@ -1,12 +1,12 @@
 package jmap
 
 import (
-	"encoding/json"
 	"fmt"
-)
+	"slices"
+	"strings"
 
-const CalendarObjectType = "Calendar"
-const EventObjectType = "CalendarEvent"
+	"opencloud.eu/groupware-assistant/pkg/tools"
+)
 
 type CalendarRights struct {
 	MayAdmin         bool `json:"mayAdmin"`
@@ -44,74 +44,36 @@ type NewCalendar struct {
 }
 
 func ListCalendars(j *Jmap, accountId string) ([]Calendar, error) {
-	if accountId == "" {
-		// use default mail account
-		accountId = j.session.PrimaryAccounts.Calendars
-		if accountId == "" {
-			return nil, fmt.Errorf("session has no matching primary account")
-		}
+	if accountId, err := j.calendarAccountId(accountId); err != nil {
+		return nil, err
 	} else {
-		if _, ok := j.session.Accounts[accountId]; !ok {
-			return nil, fmt.Errorf("account ID '%s' does not exist in session", accountId)
+		if list, err := objects[Calendar](j, accountId, CalendarObjectType, JmapCalendars); err != nil {
+			return nil, err
+		} else {
+			slices.SortFunc(list, func(a, b Calendar) int { return strings.Compare(a.Id, b.Id) })
+			return list, err
 		}
 	}
-	return objects[Calendar](j, accountId, CalendarObjectType, JmapCalendars)
 }
 
 func CreateCalendar(j *Jmap, accountId string, cal NewCalendar) (string, error) {
-	if accountId == "" {
-		// use default mail account
-		accountId = j.session.PrimaryAccounts.Calendars
-		if accountId == "" {
-			return "", fmt.Errorf("session has no matching primary account")
-		}
+	if accountId, err := j.calendarAccountId(accountId); err != nil {
+		return "", err
 	} else {
-		if _, ok := j.session.Accounts[accountId]; !ok {
-			return "", fmt.Errorf("account ID '%s' does not exist in session", accountId)
+		if m, err := tools.Remap(cal); err != nil {
+			return "", err
+		} else {
+			return create(j, CalendarObjectType, createBody(accountId, CalendarObjectType, JmapCalendars, m))
 		}
 	}
-	b, err := json.Marshal(cal)
-	if err != nil {
-		return "", err
-	}
-	var m map[string]any
-	err = json.Unmarshal(b, &m)
-	if err != nil {
-		return "", err
-	}
-
-	body := map[string]any{
-		"using": []string{JmapCore, JmapCalendars},
-		"methodCalls": []any{
-			[]any{
-				CalendarObjectType + "/set",
-				map[string]any{
-					"accountId": accountId,
-					"create": map[string]any{
-						"c": m,
-					},
-				},
-				"0",
-			},
-		},
-	}
-
-	return create(j, "c", CalendarObjectType, body)
 }
 
 func DeleteCalendar(j *Jmap, accountId string, id string) error {
-	if accountId == "" {
-		// use default mail account
-		accountId = j.session.PrimaryAccounts.Calendars
-		if accountId == "" {
-			return fmt.Errorf("session has no matching primary account")
-		}
+	if accountId, err := j.calendarAccountId(accountId); err != nil {
+		return err
 	} else {
-		if _, ok := j.session.Accounts[accountId]; !ok {
-			return fmt.Errorf("account ID '%s' does not exist in session", accountId)
-		}
+		return destroy(j, accountId, CalendarObjectType, JmapCalendars, []string{id})
 	}
-	return destroy(j, accountId, CalendarObjectType, JmapCalendars, []string{id})
 }
 
 type EventSender struct {
@@ -125,45 +87,37 @@ func (s *EventSender) CalendarId() string {
 }
 
 func NewEventSender(j *Jmap, accountId string, calendarId string) (*EventSender, error) {
-	if accountId == "" {
-		// use default mail account
-		accountId = j.session.PrimaryAccounts.Calendars
-		if accountId == "" {
-			return nil, fmt.Errorf("session has no matching primary account")
-		}
-	} else {
-		if _, ok := j.session.Accounts[accountId]; !ok {
-			return nil, fmt.Errorf("account ID '%s' does not exist in session", accountId)
-		}
-	}
-
-	calendarsById, err := objectsById(j, accountId, CalendarObjectType, JmapCalendars)
-	if err != nil {
+	if accountId, err := j.calendarAccountId(accountId); err != nil {
 		return nil, err
-	}
-	if calendarId != "" {
-		if _, ok := calendarsById[calendarId]; !ok {
-			return nil, fmt.Errorf("calendar with id '%s' does not exist", calendarId)
-		}
 	} else {
-		for id, calendar := range calendarsById {
-			if isDefault, ok := calendar["isDefault"]; ok {
-				if isDefault.(bool) {
-					calendarId = id
-					break
+		calendarsById, err := objectsById(j, accountId, CalendarObjectType, JmapCalendars)
+		if err != nil {
+			return nil, err
+		}
+		if calendarId != "" {
+			if _, ok := calendarsById[calendarId]; !ok {
+				return nil, fmt.Errorf("calendar with id '%s' does not exist", calendarId)
+			}
+		} else {
+			for id, calendar := range calendarsById {
+				if isDefault, ok := calendar["isDefault"]; ok {
+					if isDefault.(bool) {
+						calendarId = id
+						break
+					}
 				}
 			}
 		}
-	}
-	if calendarId == "" {
-		return nil, fmt.Errorf("failed to find a default Calendar")
-	}
+		if calendarId == "" {
+			return nil, fmt.Errorf("failed to find a default %s", CalendarObjectType)
+		}
 
-	return &EventSender{
-		j:          j,
-		accountId:  accountId,
-		calendarId: calendarId,
-	}, nil
+		return &EventSender{
+			j:          j,
+			accountId:  accountId,
+			calendarId: calendarId,
+		}, nil
+	}
 }
 
 func (j *EventSender) Close() error {
@@ -181,21 +135,5 @@ func (j *EventSender) destroy(ids []string) error {
 }
 
 func (j *EventSender) CreateEvent(c map[string]any) (string, error) {
-	body := map[string]any{
-		"using": []string{JmapCore, JmapContacts},
-		"methodCalls": []any{
-			[]any{
-				EventObjectType + "/set",
-				map[string]any{
-					"accountId": j.accountId,
-					"create": map[string]any{
-						"c": c,
-					},
-				},
-				"0",
-			},
-		},
-	}
-
-	return create(j.j, "c", EventObjectType, body)
+	return create(j.j, EventObjectType, createBody(j.accountId, EventObjectType, JmapContacts, c))
 }

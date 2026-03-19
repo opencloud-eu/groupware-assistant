@@ -1,12 +1,12 @@
 package jmap
 
 import (
-	"encoding/json"
 	"fmt"
-)
+	"slices"
+	"strings"
 
-var AddressBookObjectType = "AddressBook"
-var ContactCardObjectType = "ContactCard"
+	"opencloud.eu/groupware-assistant/pkg/tools"
+)
 
 type AddressbookRights struct {
 	MayAdmin  bool `json:"mayAdmin"`
@@ -33,74 +33,36 @@ type NewAddressbook struct {
 }
 
 func ListAddressbooks(j *Jmap, accountId string) ([]Addressbook, error) {
-	if accountId == "" {
-		// use default mail account
-		accountId = j.session.PrimaryAccounts.Contacts
-		if accountId == "" {
-			return nil, fmt.Errorf("session has no matching primary account")
-		}
+	if accountId, err := j.contactAccountId(accountId); err != nil {
+		return nil, err
 	} else {
-		if _, ok := j.session.Accounts[accountId]; !ok {
-			return nil, fmt.Errorf("account ID '%s' does not exist in session", accountId)
+		if list, err := objects[Addressbook](j, accountId, AddressBookObjectType, JmapContacts); err != nil {
+			return nil, err
+		} else {
+			slices.SortFunc(list, func(a, b Addressbook) int { return strings.Compare(a.Id, b.Id) })
+			return list, err
 		}
 	}
-	return objects[Addressbook](j, accountId, AddressBookObjectType, JmapContacts)
 }
 
 func CreateAddressbook(j *Jmap, accountId string, abook NewAddressbook) (string, error) {
-	if accountId == "" {
-		// use default mail account
-		accountId = j.session.PrimaryAccounts.Contacts
-		if accountId == "" {
-			return "", fmt.Errorf("session has no matching primary account")
-		}
+	if accountId, err := j.contactAccountId(accountId); err != nil {
+		return "", err
 	} else {
-		if _, ok := j.session.Accounts[accountId]; !ok {
-			return "", fmt.Errorf("account ID '%s' does not exist in session", accountId)
+		if m, err := tools.Remap(abook); err != nil {
+			return "", err
+		} else {
+			return create(j, AddressBookObjectType, createBody(accountId, AddressBookObjectType, JmapContacts, m))
 		}
 	}
-	b, err := json.Marshal(abook)
-	if err != nil {
-		return "", err
-	}
-	var m map[string]any
-	err = json.Unmarshal(b, &m)
-	if err != nil {
-		return "", err
-	}
-
-	body := map[string]any{
-		"using": []string{JmapCore, JmapContacts},
-		"methodCalls": []any{
-			[]any{
-				AddressBookObjectType + "/set",
-				map[string]any{
-					"accountId": accountId,
-					"create": map[string]any{
-						"c": m,
-					},
-				},
-				"0",
-			},
-		},
-	}
-
-	return create(j, "c", AddressBookObjectType, body)
 }
 
 func DeleteAddressbook(j *Jmap, accountId string, id string) error {
-	if accountId == "" {
-		// use default mail account
-		accountId = j.session.PrimaryAccounts.Contacts
-		if accountId == "" {
-			return fmt.Errorf("session has no matching primary account")
-		}
+	if accountId, err := j.contactAccountId(accountId); err != nil {
+		return err
 	} else {
-		if _, ok := j.session.Accounts[accountId]; !ok {
-			return fmt.Errorf("account ID '%s' does not exist in session", accountId)
-		}
+		return destroy(j, accountId, AddressBookObjectType, JmapContacts, []string{id})
 	}
-	return destroy(j, accountId, AddressBookObjectType, JmapContacts, []string{id})
 }
 
 type ContactSender struct {
@@ -114,45 +76,37 @@ func (s *ContactSender) AddressBook() string {
 }
 
 func NewContactSender(j *Jmap, accountId string, addressbookId string) (*ContactSender, error) {
-	if accountId == "" {
-		// use default mail account
-		accountId = j.session.PrimaryAccounts.Contacts
-		if accountId == "" {
-			return nil, fmt.Errorf("session has no matching primary account")
-		}
-	} else {
-		if _, ok := j.session.Accounts[accountId]; !ok {
-			return nil, fmt.Errorf("account ID '%s' does not exist in session", accountId)
-		}
-	}
-
-	addressbooksById, err := objectsById(j, accountId, AddressBookObjectType, JmapContacts)
-	if err != nil {
+	if accountId, err := j.contactAccountId(accountId); err != nil {
 		return nil, err
-	}
-	if addressbookId != "" {
-		if _, ok := addressbooksById[addressbookId]; !ok {
-			return nil, fmt.Errorf("addressbook with id '%s' does not exist", addressbookId)
-		}
 	} else {
-		for id, addressbook := range addressbooksById {
-			if isDefault, ok := addressbook["isDefault"]; ok {
-				if isDefault.(bool) {
-					addressbookId = id
-					break
+		addressbooksById, err := objectsById(j, accountId, AddressBookObjectType, JmapContacts)
+		if err != nil {
+			return nil, err
+		}
+		if addressbookId != "" {
+			if _, ok := addressbooksById[addressbookId]; !ok {
+				return nil, fmt.Errorf("addressbook with id '%s' does not exist", addressbookId)
+			}
+		} else {
+			for id, addressbook := range addressbooksById {
+				if isDefault, ok := addressbook["isDefault"]; ok {
+					if isDefault.(bool) {
+						addressbookId = id
+						break
+					}
 				}
 			}
 		}
-	}
-	if addressbookId == "" {
-		return nil, fmt.Errorf("failed to find a default AddressBook")
-	}
+		if addressbookId == "" {
+			return nil, fmt.Errorf("failed to find a default AddressBook")
+		}
 
-	return &ContactSender{
-		j:             j,
-		accountId:     accountId,
-		addressbookId: addressbookId,
-	}, nil
+		return &ContactSender{
+			j:             j,
+			accountId:     accountId,
+			addressbookId: addressbookId,
+		}, nil
+	}
 }
 
 func (s *ContactSender) Close() error {
@@ -170,20 +124,5 @@ func (s *ContactSender) destroy(ids []string) error {
 }
 
 func (s *ContactSender) CreateContact(c map[string]any) (string, error) {
-	body := map[string]any{
-		"using": []string{JmapCore, JmapContacts},
-		"methodCalls": []any{
-			[]any{
-				ContactCardObjectType + "/set",
-				map[string]any{
-					"accountId": s.accountId,
-					"create": map[string]any{
-						"c": c,
-					},
-				},
-				"0",
-			},
-		},
-	}
-	return create(s.j, "c", ContactCardObjectType, body)
+	return create(s.j, ContactCardObjectType, createBody(s.accountId, ContactCardObjectType, JmapContacts, c))
 }

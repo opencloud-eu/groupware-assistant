@@ -1,13 +1,16 @@
 package cmd
 
 import (
+	"encoding/json"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"go.yaml.in/yaml/v4"
 
 	"opencloud.eu/groupware-assistant/pkg/jmap"
 	"opencloud.eu/groupware-assistant/pkg/tools"
@@ -59,6 +62,60 @@ func (m ListModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func ListJson[T any](
+	lister func(*jmap.Jmap, string) ([]T, error),
+) error {
+	u, err := url.Parse(JmapUrl)
+	if err != nil {
+		return err
+	}
+
+	j, err := jmap.NewJmap(u, Username, Password, Trace, Color)
+	if err != nil {
+		return err
+	}
+	defer j.Close()
+
+	list, err := lister(j, AccountId)
+	if err != nil {
+		return err
+	}
+
+	if b, err := json.MarshalIndent(list, "", "  "); err != nil {
+		return err
+	} else {
+		_, err := os.Stdout.Write(b)
+		return err
+	}
+}
+
+func ListYaml[T any](
+	lister func(*jmap.Jmap, string) ([]T, error),
+) error {
+	u, err := url.Parse(JmapUrl)
+	if err != nil {
+		return err
+	}
+
+	j, err := jmap.NewJmap(u, Username, Password, Trace, Color)
+	if err != nil {
+		return err
+	}
+	defer j.Close()
+
+	list, err := lister(j, AccountId)
+	if err != nil {
+		return err
+	}
+
+	if b, err := yaml.Marshal(list); err != nil {
+		return err
+	} else {
+		_, err := os.Stdout.Write(b)
+		return err
+	}
+}
+
 func List[T any](
 	lister func(*jmap.Jmap, string) ([]T, error),
 	columner func([]T) []table.Column,
@@ -66,7 +123,6 @@ func List[T any](
 	detailer func(T, lipgloss.Style) string,
 	idMapper func(T) string,
 ) error {
-
 	u, err := url.Parse(JmapUrl)
 	if err != nil {
 		return err

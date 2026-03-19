@@ -104,7 +104,7 @@ var emailGenerateCmd = &cobra.Command{
 		}
 
 		if senders == 0 {
-			senders = min(1, count/4)
+			senders = max(1, count/4)
 		}
 
 		return generator.GenerateEmails(
