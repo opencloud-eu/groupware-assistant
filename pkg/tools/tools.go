@@ -111,3 +111,11 @@ func Remap(in any) (map[string]any, error) {
 	}
 	return m, nil
 }
+
+func Map[A any, B any](source []A, mapper func(A) B) []B {
+	target := make([]B, len(source))
+	for i, a := range source {
+		target[i] = mapper(a)
+	}
+	return target
+}

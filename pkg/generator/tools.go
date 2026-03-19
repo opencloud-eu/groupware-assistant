@@ -55,32 +55,18 @@ type SenderGenerator struct {
 	senders []Sender
 }
 
-var domains = []string{
-	".com",
-	".org",
-	".net",
-	".eu",
-	".name",
-}
-
-func addressize(s string) string {
-	return strings.ReplaceAll(strings.ToLower(s), " ", ".")
-}
-
 func newSenderGenerator(numSenders uint) SenderGenerator {
 	if numSenders < 1 {
 		panic(fmt.Errorf("requesting less than 1 sender"))
 	}
 	senders := make([]Sender, numSenders)
 	for i := range numSenders {
-		person := gofakeit.Person()
-		domain := tools.PickRandom(domains...)
-		email := fmt.Sprintf("%s@%s%s", addressize(person.FirstName), addressize(person.LastName), domain)
+		person := newPerson()
 		senders[i] = Sender{
-			first:  person.FirstName,
-			last:   person.LastName,
-			from:   email,
-			sender: fmt.Sprintf("%s %s <%s>", person.FirstName, person.LastName, email),
+			first:  person.GivenName,
+			last:   person.SurName,
+			from:   person.Email,
+			sender: fmt.Sprintf("%s <%s>", person.FullName, person.Email),
 		}
 	}
 	return SenderGenerator{
@@ -138,50 +124,87 @@ func toIcal(created time.Time, starts time.Time, duration time.Duration, summary
 	return cal.Serialize()
 }
 
-func createName(person *gofakeit.PersonInfo) map[string]any {
+func createName(person Person) map[string]any {
 	name := map[string]any{
 		"@type": "Name",
 	}
 	n := rand.IntN(3)
+	// 0: components only
+	// 1: components and full
+	// 2: full only
 	switch n {
 	case 0, 1:
-		components := make([]map[string]string, 2)
-		components[0] = map[string]string{
-			"kind":  "given",
-			"value": person.FirstName,
-		}
-		components[1] = map[string]string{
-			"kind":  "surname",
-			"value": person.LastName,
+		components := []map[string]string{}
+		// 0: given, surname
+		// 1: surname, given
+		ordered := true
+		switch rand.IntN(2) {
+		case 0:
+			components = append(components, map[string]string{"kind": "given", "value": person.GivenName})
+			components = append(components, map[string]string{"kind": "surname", "value": person.SurName})
+			if person.SurName2 != "" {
+				components = append(components, map[string]string{"kind": "surname2", "value": person.SurName2})
+			}
+			ordered = true
+		case 1:
+			components = append(components, map[string]string{"kind": "surname", "value": person.SurName})
+			if person.SurName2 != "" {
+				components = append(components, map[string]string{"kind": "surname2", "value": person.SurName2})
+			}
+			components = append(components, map[string]string{"kind": "given", "value": person.GivenName})
+			ordered = false
 		}
 		name["components"] = components
-		name["isOrdered"] = true
+		if !ordered {
+			switch rand.IntN(2) {
+			case 0:
+				name["isOrdered"] = false
+			}
+		} else {
+			name["isOrdered"] = true
+			name["defaultSeparator"] = " "
+		}
 	}
 	switch n {
 	case 1, 2:
-		name["full"] = fmt.Sprintf("%s %s", person.FirstName, person.LastName)
+		if person.SurName2 != "" {
+			name["full"] = fmt.Sprintf("%s %s %s", person.GivenName, person.SurName, person.SurName2)
+		} else {
+			name["full"] = fmt.Sprintf("%s %s", person.GivenName, person.SurName)
+		}
 	}
-	name["defaultSeparator"] = " "
 	return name
 }
 
-func createNickName(_ *gofakeit.PersonInfo) map[string]any {
-	return map[string]any{
-		"@type":   "Name",
-		"name":    gofakeit.PetName(),
-		"context": tools.ToBoolMap(tools.PickRandoms("work", "private")),
+func createNickName(person Person) *map[string]any {
+	if person.NickName != "" {
+		return &map[string]any{
+			"@type":   "Name",
+			"name":    person.NickName,
+			"context": tools.ToBoolMap(tools.PickRandoms("work", "private")),
+		}
+	} else {
+		return nil
 	}
 }
 
-func createEmail(person *gofakeit.PersonInfo, pref int) map[string]any {
-	email := person.Contact.Email
-	return map[string]any{
+func createEmail(person Person, pref int) map[string]any {
+	email := person.Email
+	label := ""
+	switch rand.IntN(3) {
+	case 2:
+		label = strings.ToLower(person.GivenName)
+	}
+	r := map[string]any{
 		"@type":   "EmailAddress",
 		"address": email,
 		"context": tools.ToBoolMap(tools.PickRandoms("work", "private")),
-		"label":   strings.ToLower(person.FirstName),
 		"pref":    pref,
 	}
+	if label != "" {
+		r["label"] = label
+	}
+	return r
 }
 
 func createSecondaryEmail(email string, pref int) map[string]any {
@@ -319,7 +342,7 @@ func createParticipants(locationId string, virtualLocationid string) (map[string
 
 func createParticipant(i int, locationId string, organizerEmail string, organizerId string) (string, string, map[string]any) {
 	participantId := id()
-	person := gofakeit.Person()
+	person := newPerson()
 	roles := RegularRoles
 	if i == 0 {
 		roles = ChairRoles
@@ -333,16 +356,16 @@ func createParticipant(i int, locationId string, organizerEmail string, organize
 		statusComment = gofakeit.HipsterSentence()
 	}
 	if i == 0 {
-		organizerEmail = person.Contact.Email
+		organizerEmail = person.Email
 		organizerId = participantId
 	}
 	m := map[string]any{
 		"@type":       "Participant",
-		"name":        person.FirstName + " " + person.LastName,
-		"email":       person.Contact.Email,
-		"description": person.Job.Title,
+		"name":        person.FullName,
+		"email":       person.Email,
+		"description": person.JobTitle,
 		"sendTo": map[string]string{
-			"imip": "mailto:" + person.Contact.Email,
+			"imip": "mailto:" + person.Email,
 		},
 		"kind":                 "individual",
 		"roles":                roles,
@@ -357,7 +380,7 @@ func createParticipant(i int, locationId string, organizerEmail string, organize
 		"scheduleUpdated":      "2025-10-01T1:59:12Z",
 		"sentBy":               organizerEmail,
 		"invitedBy":            organizerId,
-		"scheduleId":           "mailto:" + person.Contact.Email,
+		"scheduleId":           "mailto:" + person.Email,
 	}
 
 	links := map[string]map[string]any{}
@@ -368,14 +391,14 @@ func createParticipant(i int, locationId string, organizerEmail string, organize
 			"contentType": "image/jpeg",
 			"rel":         "icon",
 			"display":     "badge",
-			"title":       person.FirstName + "'s Cake Day pick",
+			"title":       person.GivenName + "'s Cake Day pick",
 		}
 	}
 	if len(links) > 0 {
 		m["links"] = links
 	}
 
-	return participantId, person.Contact.Email, m
+	return participantId, person.Email, m
 }
 
 var Keywords = []string{

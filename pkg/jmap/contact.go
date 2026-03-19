@@ -2,9 +2,11 @@ package jmap
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
+	"github.com/brianvoe/gofakeit/v7"
 	"opencloud.eu/groupware-assistant/pkg/tools"
 )
 
@@ -98,7 +100,14 @@ func NewContactSender(j *Jmap, accountId string, addressbookId string) (*Contact
 			}
 		}
 		if addressbookId == "" {
-			return nil, fmt.Errorf("failed to find a default AddressBook")
+			// use the addressbook with the lowest id
+			ids := slices.Collect(maps.Keys(addressbooksById))
+			if len(ids) > 0 {
+				slices.Sort(ids)
+				addressbookId = ids[0]
+			} else {
+				return nil, fmt.Errorf("no addressbooks found")
+			}
 		}
 
 		return &ContactSender{
@@ -123,6 +132,38 @@ func (s *ContactSender) destroy(ids []string) error {
 	return destroy(s.j, s.accountId, ContactCardObjectType, JmapContacts, ids)
 }
 
-func (s *ContactSender) CreateContact(c map[string]any) (string, error) {
-	return create(s.j, ContactCardObjectType, createBody(s.accountId, ContactCardObjectType, JmapContacts, c))
+func (s *ContactSender) CreateContact(c map[string]any) (string, []string, error) {
+	mediaBlobIds := []string{}
+	if media, ok := c["media"]; ok && media != nil {
+		if media, ok := media.(map[string]map[string]any); ok {
+			for _, obj := range media {
+				if kind, ok := obj["kind"]; ok && kind == "photo" {
+					if uri, ok := obj["uri"]; !ok || uri == "" {
+						if mediaType, ok := obj["mediaType"].(string); ok && mediaType != "" {
+							dim := tools.PickRandom(100, 128, 200, 256, 384, 512)
+							var image []byte = nil
+							switch mediaType {
+							case "image/jpeg":
+								image = gofakeit.ImageJpeg(dim, dim)
+							case "image/png":
+								image = gofakeit.ImagePng(dim, dim)
+							}
+							if blob, err := s.j.uploadBlob(s.accountId, image, mediaType); err != nil {
+								return "", nil, err
+							} else {
+								obj["blobId"] = blob.BlobId
+								mediaBlobIds = append(mediaBlobIds, blob.BlobId)
+							}
+						} else {
+							panic("contact media has no uri but neither does it have a mediaType")
+						}
+					}
+				}
+			}
+		} else {
+			panic("contact media is not a map")
+		}
+	}
+	id, err := create(s.j, ContactCardObjectType, createBody(s.accountId, ContactCardObjectType, JmapContacts, c))
+	return id, mediaBlobIds, err
 }

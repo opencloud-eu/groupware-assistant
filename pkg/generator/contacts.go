@@ -27,6 +27,8 @@ func GenerateContacts(
 	empty bool,
 	addressbookId string,
 	count uint,
+	includeDataUri bool,
+	mediaBlobs bool,
 	printer func(string),
 ) error {
 	var s *jmap.ContactSender = nil
@@ -61,8 +63,16 @@ func GenerateContacts(
 		}
 	}
 
+	mediaOptions := []string{"picsum"}
+	if includeDataUri {
+		mediaOptions = append(mediaOptions, "data:jpeg", "data:png")
+	}
+	if mediaBlobs {
+		mediaOptions = append(mediaOptions, "blob:jpeg", "blob:png")
+	}
+
 	for i := range count {
-		person := gofakeit.Person()
+		person := newPerson()
 		contact := map[string]any{
 			"@type":          "Card",
 			"version":        "1.0",
@@ -73,8 +83,8 @@ func GenerateContacts(
 			"name":           createName(person),
 		}
 
-		if rand.Intn(3) < 1 {
-			contact["nicknames"] = map[string]map[string]any{id(): createNickName(person)}
+		if nn := createNickName(person); nn != nil {
+			contact["nicknames"] = map[string]map[string]any{id(): *nn}
 		}
 
 		{
@@ -89,7 +99,7 @@ func GenerateContacts(
 			}
 		}
 		if err := propmap(contact, "phones", 0, 2, func(i int, id string) (map[string]any, error) {
-			num := person.Contact.Phone
+			num := person.Phone
 			if i > 0 {
 				num = gofakeit.Phone()
 			}
@@ -151,20 +161,20 @@ func GenerateContacts(
 				return map[string]any{
 					"@type":   "OnlineService",
 					"service": "Mastodon",
-					"user":    "@" + person.Contact.Email,
-					"uri":     "https://mastodon.example.com/@" + strings.ToLower(person.FirstName),
+					"user":    "@" + person.Email,
+					"uri":     "https://mastodon.example.com/@" + strings.ToLower(person.GivenName),
 				}, nil
 			case 1:
 				return map[string]any{
 					"@type": "OnlineService",
-					"uri":   "xmpp:" + person.Contact.Email,
+					"uri":   "xmpp:" + person.Email,
 				}, nil
 			default:
 				return map[string]any{
 					"@type":   "OnlineService",
 					"service": "Discord",
-					"user":    person.Contact.Email,
-					"uri":     "https://discord.example.com/user/" + person.Contact.Email,
+					"user":    person.Email,
+					"uri":     "https://discord.example.com/user/" + person.Email,
 				}, nil
 			}
 		}); err != nil {
@@ -189,13 +199,13 @@ func GenerateContacts(
 				orgId := id()
 				org := map[string]any{
 					"@type":    "Organization",
-					"name":     person.Job.Company,
+					"name":     person.Company,
 					"contexts": tools.ToBoolMapS("work"),
 				}
 				title := map[string]any{
 					"@type":          "Title",
 					"kind":           "title",
-					"name":           person.Job.Title,
+					"name":           person.JobTitle,
 					"organizationId": orgId,
 				}
 				organizations[orgId] = org
@@ -208,7 +218,7 @@ func GenerateContacts(
 		}
 
 		if err := propmap(contact, "cryptoKeys", 0, 1, func(i int, id string) (map[string]any, error) {
-			key, err := helper.GenerateKey(person.FirstName+" "+person.LastName, person.Contact.Email, []byte("secret"), "x25519", 0)
+			key, err := helper.GenerateKey(person.FullName, person.Email, []byte("secret"), "x25519", 0)
 			if err != nil {
 				return nil, err
 			}
@@ -228,18 +238,54 @@ func GenerateContacts(
 			return err
 		}
 		if err := propmap(contact, "media", 0, 1, func(i int, id string) (map[string]any, error) {
-			if rand.Intn(2) < 1 {
-				return map[string]any{
+			switch tools.PickRandom(mediaOptions...) {
+			case "picsum": // reference HTTP URI to picsum.photos
+				dim := tools.PickRandom(64, 80, 100, 128, 200, 256, 384, 512)
+				m := map[string]any{
 					"@type": "Media",
 					"kind":  "photo",
-					"uri":   "data:image/jpeg;base64," + base64.RawStdEncoding.EncodeToString(gofakeit.ImageJpeg(64, 64)),
-				}, nil
-			} else {
+					"uri":   picsum(dim, dim),
+				}
+				if rand.Intn(2) == 0 {
+					m["mediaType"] = "image/jpeg"
+				}
+				return m, nil
+			case "blob:jpeg": // will generate a JPEG blob
 				return map[string]any{
+					"@type":     "Media",
+					"kind":      "photo",
+					"mediaType": "image/jpeg",
+				}, nil
+			case "blob:png": // will generate a PNG blob
+				return map[string]any{
+					"@type":     "Media",
+					"kind":      "photo",
+					"mediaType": "image/png",
+				}, nil
+			case "data:jpeg": // a JPEG as data: URI
+				dim := tools.PickRandom(64, 80, 100, 128)
+				m := map[string]any{
 					"@type": "Media",
 					"kind":  "photo",
-					"uri":   picsum(128, 128),
-				}, nil
+					"uri":   "data:image/jpeg;base64," + base64.RawStdEncoding.EncodeToString(gofakeit.ImageJpeg(dim, dim)),
+				}
+				if rand.Intn(2) == 0 {
+					m["mediaType"] = "image/jpeg"
+				}
+				return m, nil
+			case "data:png": // a PNG as data: URI
+				dim := tools.PickRandom(64, 80, 100, 128)
+				m := map[string]any{
+					"@type": "Media",
+					"kind":  "photo",
+					"uri":   "data:image/png;base64," + base64.RawStdEncoding.EncodeToString(gofakeit.ImagePng(dim, dim)),
+				}
+				if rand.Intn(2) == 0 {
+					m["mediaType"] = "image/png"
+				}
+				return m, nil
+			default:
+				panic(fmt.Errorf("unsupported switch option"))
 			}
 		}); err != nil {
 			return err
@@ -248,18 +294,23 @@ func GenerateContacts(
 			return map[string]any{
 				"@type": "Link",
 				"kind":  "contact",
-				"uri":   "mailto" + person.Contact.Email,
+				"uri":   "mailto" + person.Email,
 				"pref":  (i + 1) * 10,
 			}, nil
 		}); err != nil {
 			return err
 		}
 
-		uid, err := s.CreateContact(contact)
+		uid, mediaBlobIds, err := s.CreateContact(contact)
 		if err != nil {
 			return err
 		}
-		printer(fmt.Sprintf("🧑🏻 created %*s/%v uid=%v", int(math.Log10(float64(count))+1), strconv.Itoa(int(i+1)), count, uid))
+
+		mediaBlobIdsText := ""
+		if len(mediaBlobIds) > 0 {
+			mediaBlobIdsText = " " + strings.Join(tools.Map(mediaBlobIds, func(blobId string) string { return fmt.Sprintf("🖼️%s", blobId) }), " ")
+		}
+		printer(fmt.Sprintf("🧑🏻 created %*s/%v uid=%v name='%s' <%s>%s", int(math.Log10(float64(count))+1), strconv.Itoa(int(i+1)), count, uid, person.FullName, person.Email, mediaBlobIdsText))
 	}
 	return nil
 }

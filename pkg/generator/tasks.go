@@ -57,7 +57,7 @@ func GenerateTasks(
 	}
 
 	for i := range count {
-		person := gofakeit.Person()
+		person := newPerson()
 		task := map[string]any{
 			"@type":       "Task",
 			"version":     "1.0",
