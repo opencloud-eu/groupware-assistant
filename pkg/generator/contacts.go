@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ProtonMail/gopenpgp/v2/crypto"
 	"github.com/ProtonMail/gopenpgp/v2/helper"
@@ -73,6 +74,7 @@ func GenerateContacts(
 
 	for i := range count {
 		person := newPerson()
+		created := timestamp(time.Now(), -1)
 		contact := map[string]any{
 			"@type":          "Card",
 			"version":        "1.0",
@@ -81,6 +83,10 @@ func GenerateContacts(
 			"language":       tools.PickLanguage(),
 			"kind":           "invidual",
 			"name":           createName(person),
+			"created":        created,
+		}
+		if rand.Intn(2) < 1 {
+			contact["updated"] = timestamp(created, 1)
 		}
 
 		if nn := createNickName(person); nn != nil {

@@ -448,3 +448,17 @@ func propmap(container map[string]any, name string, min int, max int, generator 
 func picsum(w, h int) string {
 	return fmt.Sprintf("https://picsum.photos/id/%d/%d/%d", 1+rand.IntN(200), h, w)
 }
+
+func timestamp(t time.Time, f int) time.Time {
+	d := time.Duration(1)
+	if f <= 0 {
+		d = time.Duration(-1)
+	}
+	t = t.Add(d * time.Duration(rand.IntN(14)) * 24 * time.Hour)
+	t = t.Add(d * time.Duration(rand.IntN(24)) * time.Hour)
+	t = t.Add(d * time.Duration(rand.IntN(60)) * time.Minute)
+	t = t.Add(d * time.Duration(rand.IntN(60)) * time.Second)
+	t = t.Add(d * time.Duration(rand.IntN(1000)) * time.Millisecond)
+	t = t.Truncate(time.Millisecond)
+	return t
+}
