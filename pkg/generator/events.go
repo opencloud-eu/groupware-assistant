@@ -52,7 +52,7 @@ func GenerateEvents(
 			return err
 		}
 		if deleted > 0 {
-			printer(fmt.Sprintf("🗑️ deleted %d events", deleted))
+			printer(fmt.Sprintf("🗑️  deleted %d events", deleted))
 		} else {
 			printer("ℹ️ did not delete any events, calendar is empty")
 		}
@@ -143,11 +143,12 @@ func GenerateEvents(
 			event["recurrenceRule"] = recurrenceRule
 		}
 
-		uid, err := s.CreateEvent(event)
+		id, err := s.CreateEvent(event)
 		if err != nil {
 			return err
 		}
-		printer(fmt.Sprintf("🧑🏻 created %*s/%v uid=%v", int(math.Log10(float64(count))+1), strconv.Itoa(int(i+1)), count, uid))
+
+		printer(fmt.Sprintf("📅 created %*s/%v id=%v uid='%s' title='%s'", int(math.Log10(float64(count))+1), strconv.Itoa(int(i+1)), count, id, event["uid"], event["title"]))
 	}
 	return nil
 }

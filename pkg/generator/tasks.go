@@ -79,11 +79,11 @@ func GenerateTasks(
 			emails[id()] = createSecondaryEmail(gofakeit.Email(), i*100)
 		}
 
-		uid, err := s.CreateTask(task)
+		id, err := s.CreateTask(task)
 		if err != nil {
 			return err
 		}
-		printer(fmt.Sprintf("📋 created %*s/%v uid=%v", int(math.Log10(float64(count))+1), strconv.Itoa(int(i+1)), count, uid))
+		printer(fmt.Sprintf("📋 created %*s/%v id=%v name='%s'", int(math.Log10(float64(count))+1), strconv.Itoa(int(i+1)), count, id, task["name"]))
 	}
 	return nil
 }

@@ -38,18 +38,22 @@ var principalListCmd = listCommand(
 	},
 	func(a jmap.Principal, titleStyle lipgloss.Style) string {
 		var text strings.Builder
-		text.WriteString(titleStyle.Render("Accounts:") + "\n")
+		text.WriteString(titleStyle.Render("Accounts:"))
+		text.WriteString("\n")
 		for id, acc := range a.Accounts {
-			text.WriteString(titleStyle.Render(id) + "\n")
+			text.WriteString(titleStyle.Render(id))
+			text.WriteString("\n")
 			fmt.Fprintf(&text, "Name: %v\n", acc.Name)
 			fmt.Fprintf(&text, "IsPersonal: %v\n", acc.IsPersonal)
 			fmt.Fprintf(&text, "IsReadOnly: %v\n", acc.IsReadOnly)
 		}
 		text.WriteString("\n")
-		text.WriteString(titleStyle.Render("Capabilities:") + "\n")
+		text.WriteString(titleStyle.Render("Capabilities:"))
+		text.WriteString("\n")
 		fmt.Fprintf(&text, "%v\n", a.Capabilities)
 		text.WriteString("\n")
-		text.WriteString(titleStyle.Render("Other:") + "\n")
+		text.WriteString(titleStyle.Render("Other:"))
+		text.WriteString("\n")
 		fmt.Fprintf(&text, "TZ: %v\n", a.TimeZone)
 		return text.String()
 	},

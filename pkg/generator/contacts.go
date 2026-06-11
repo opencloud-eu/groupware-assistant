@@ -18,6 +18,11 @@ import (
 	"opencloud.eu/groupware-assistant/pkg/tools"
 )
 
+const (
+	jpeg = "image/jpeg"
+	png  = "image/png"
+)
+
 func GenerateContacts(
 	jmapUrl string,
 	trace bool,
@@ -58,7 +63,7 @@ func GenerateContacts(
 			return err
 		}
 		if deleted > 0 {
-			printer(fmt.Sprintf("🗑️ deleted %d contacts", deleted))
+			printer(fmt.Sprintf("🗑️  deleted %d contacts", deleted))
 		} else {
 			printer("ℹ️ did not delete any contacts, addressbook is empty")
 		}
@@ -253,30 +258,30 @@ func GenerateContacts(
 					"uri":   picsum(dim, dim),
 				}
 				if rand.Intn(2) == 0 {
-					m["mediaType"] = "image/jpeg"
+					m["mediaType"] = jpeg
 				}
 				return m, nil
 			case "blob:jpeg": // will generate a JPEG blob
 				return map[string]any{
 					"@type":     "Media",
 					"kind":      "photo",
-					"mediaType": "image/jpeg",
+					"mediaType": jpeg,
 				}, nil
 			case "blob:png": // will generate a PNG blob
 				return map[string]any{
 					"@type":     "Media",
 					"kind":      "photo",
-					"mediaType": "image/png",
+					"mediaType": png,
 				}, nil
 			case "data:jpeg": // a JPEG as data: URI
 				dim := tools.PickRandom(64, 80, 100, 128)
 				m := map[string]any{
 					"@type": "Media",
 					"kind":  "photo",
-					"uri":   "data:image/jpeg;base64," + base64.RawStdEncoding.EncodeToString(gofakeit.ImageJpeg(dim, dim)),
+					"uri":   "data:" + jpeg + ";base64," + base64.RawStdEncoding.EncodeToString(gofakeit.ImageJpeg(dim, dim)),
 				}
 				if rand.Intn(2) == 0 {
-					m["mediaType"] = "image/jpeg"
+					m["mediaType"] = jpeg
 				}
 				return m, nil
 			case "data:png": // a PNG as data: URI
@@ -284,10 +289,10 @@ func GenerateContacts(
 				m := map[string]any{
 					"@type": "Media",
 					"kind":  "photo",
-					"uri":   "data:image/png;base64," + base64.RawStdEncoding.EncodeToString(gofakeit.ImagePng(dim, dim)),
+					"uri":   "data:" + png + ";base64," + base64.RawStdEncoding.EncodeToString(gofakeit.ImagePng(dim, dim)),
 				}
 				if rand.Intn(2) == 0 {
-					m["mediaType"] = "image/png"
+					m["mediaType"] = png
 				}
 				return m, nil
 			default:
@@ -307,7 +312,7 @@ func GenerateContacts(
 			return err
 		}
 
-		uid, mediaBlobIds, err := s.CreateContact(contact)
+		id, mediaBlobIds, err := s.CreateContact(contact)
 		if err != nil {
 			return err
 		}
@@ -316,7 +321,7 @@ func GenerateContacts(
 		if len(mediaBlobIds) > 0 {
 			mediaBlobIdsText = " " + strings.Join(tools.Map(mediaBlobIds, func(blobId string) string { return fmt.Sprintf("🖼️%s", blobId) }), " ")
 		}
-		printer(fmt.Sprintf("🧑🏻 created %*s/%v uid=%v name='%s' <%s>%s", int(math.Log10(float64(count))+1), strconv.Itoa(int(i+1)), count, uid, person.FullName, person.Email, mediaBlobIdsText))
+		printer(fmt.Sprintf("🪪 created %*s/%v id=%v name='%s' <%s>%s", int(math.Log10(float64(count))+1), strconv.Itoa(int(i+1)), count, id, person.FullName, person.Email, mediaBlobIdsText))
 	}
 	return nil
 }

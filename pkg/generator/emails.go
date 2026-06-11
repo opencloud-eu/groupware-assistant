@@ -88,7 +88,7 @@ func GenerateEmails(
 			return err
 		}
 		if deleted > 0 {
-			printer(fmt.Sprintf("🗑️ deleted %d messages", deleted))
+			printer(fmt.Sprintf("🗑️  deleted %d messages", deleted))
 		} else {
 			printer("ℹ️ did not delete any messages, folder is empty")
 		}
@@ -316,7 +316,7 @@ func GenerateEmails(
 			}
 			b.From(from)
 
-			uid, err := s.SendEmail(b)
+			id, err := s.SendEmail(b)
 			if err != nil {
 				return err
 			}
@@ -326,7 +326,7 @@ func GenerateEmails(
 				if numAttachments > 0 {
 					attachmentStr = " " + strings.Repeat("📎", int(numAttachments)) + " "
 				}
-				printer(fmt.Sprintf("📩appended %*s/%v uid=%v%s'%s'", int(math.Log10(float64(count))+1), strconv.Itoa(int(i+1)), count, uid, attachmentStr, subject))
+				printer(fmt.Sprintf("📩 created %*s/%v id=%v%s'%s'", int(math.Log10(float64(count))+1), strconv.Itoa(int(i+1)), count, id, attachmentStr, subject))
 			}
 
 			i++
