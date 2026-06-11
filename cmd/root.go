@@ -39,7 +39,7 @@ var baseStyle = lipgloss.NewStyle().
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&JmapUrl, "url", "b", "https://stalwart.opencloud.test", "JMAP base URL")
-	rootCmd.PersistentFlags().StringVarP(&Username, "username", "u", "alan", "JMAP basic authentication username")
+	rootCmd.PersistentFlags().StringVarP(&Username, "username", "u", "alan@example.org", "JMAP basic authentication username")
 	rootCmd.PersistentFlags().StringVarP(&Password, "password", "p", "demo", "JMAP basic authentication password")
 	rootCmd.PersistentFlags().StringVarP(&AccountId, "account-id", "A", "", "JMAP account ID to use, default behavior is to use the default account")
 	rootCmd.PersistentFlags().BoolVar(&Trace, "trace", false, "Show JMAP HTTP traffic")
